@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_timeout_s: float = 30
+    ors_timeout_s: float = 15
 
     routing_backend: Literal["mock", "ors"] = "mock"
     ors_api_key: SecretStr = SecretStr("")

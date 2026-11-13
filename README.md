@@ -55,6 +55,15 @@ npm run dev
 
 Postavke se čitaju iz varijabli okoline i neobveznog `.env` u korijenu repozitorija (vidi `.env.example`).
 
+### Prelazak s mock adaptera na stvarne servise
+
+Zadano je sve `mock` i radi bez mreže i bez ključeva. Za stvarne servise postavi u `.env`:
+
+- LLM (bilo koji OpenAI-kompatibilni poslužitelj): `LLM_BACKEND=api`, `LLM_BASE_URL` (do `/chat/completions`, bez tog nastavka), `LLM_MODEL` i, ako ga poslužitelj traži, `LLM_API_KEY`.
+- Rute: `ROUTING_BACKEND=ors` i `ORS_API_KEY` (po potrebi `ORS_BASE_URL`).
+
+Nakon izmjene ponovno pokreni backend. Za demo koristi samo sintetičke podatke jer upiti odlaze na vanjske servise.
+
 ## Provjere
 
 ```sh
