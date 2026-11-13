@@ -18,9 +18,26 @@ docs/       arhitektura
 
 ## Pokretanje
 
-Potrebno: [uv](https://docs.astral.sh/uv/) i Node.js 22 ili noviji.
+### Cijeli sustav (Docker)
 
-Backend (http://localhost:8000, provjera na `/health`):
+Potrebno: Docker s Compose pluginom.
+
+```sh
+cp .env.example .env   # po želji; bez ključeva sve radi s mock adapterima
+docker compose up
+```
+
+- Frontend: http://localhost:5173 (pozivi na `/api/...` proslijeđuju se backendu, npr. http://localhost:5173/api/health)
+- Backend: http://localhost:8000 (provjera na `/health`)
+- Baza PostgreSQL/PostGIS: `localhost:5432` (korisnik, lozinka i baza: `opticare`, samo za razvoj). Ako je port 5432 zauzet, u `.env` postavi `DB_PORT` (npr. `DB_PORT=5433`) i isti port upiši u `DATABASE_URL`.
+
+Backend pri pokretanju provjerava postoji li PostGIS ekstenzija i ne starta ako je nema.
+
+### Lokalno bez Dockera za aplikaciju
+
+Potrebno: [uv](https://docs.astral.sh/uv/) i Node.js 22 ili noviji. Bazu pokrenite iz Composea: `docker compose up db`.
+
+Backend (http://localhost:8000):
 
 ```sh
 cd backend
@@ -36,7 +53,7 @@ npm install
 npm run dev
 ```
 
-Pokretanje cijelog sustava jednom naredbom (`docker compose up`, s bazom PostgreSQL/PostGIS) dolazi u zadatku E0-T5.
+Postavke se čitaju iz varijabli okoline i neobveznog `.env` u korijenu repozitorija (vidi `.env.example`).
 
 ## Provjere
 
