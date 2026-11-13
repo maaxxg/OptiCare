@@ -1,0 +1,30 @@
+# Domenski sadržaj (E13-T1 do T3)
+
+Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je izmišljeno: imena, MBO i telefoni su očito lažni, nema ulica, a vrijednosti su procjene, ne klinički ni pravni podaci. Spornim vrijednostima u datotekama dodana je oznaka `# REVIEW:`.
+
+## Datoteke
+
+| Datoteka | Sadržaj | Koristi |
+| --- | --- | --- |
+| `patient_profiles.yaml` | 18 izmišljenih pacijenata s jednim zahtjevom za pregled | E1-T3 (početni podaci za demo) |
+| `urgency_and_durations.yaml` | djelatnosti, vrste pregleda, klase hitnosti, trajanje pregleda (medijan i 90. percentil), vrijeme ukrcaja | E1-T2 (šifrarnici), E4-T2 (zadana pravila) |
+| `scoring_factors.yaml` | faktori bodovanja, težine, pojasevi i razine usluge | E3-T1 (bodovi potrebe za podrškom) |
+
+## Načela
+
+- Bodovi i razine samo dodaju pomoć. Nijedan faktor, prag ni razina ne smije ukloniti ili zapostaviti pacijenta.
+- `expected_transport_entitlement` je očekivani prijedlog sustava, ne činjenica. Pravo utvrđuje izabrani liječnik.
+- Pokretni pacijenti bez prava ne idu na sanitetska vozila. Oznaka `social_order_today: true` označava one koji bi danas vjerojatno dobili nalog iz socijalnih razloga.
+- Pacijenti-vozači (`p05`, `p07`) i potencijalni suputnici imaju `carpool_consent: true`; suputnici su samostalno pokretni.
+
+## Otvorene stavke za pregled
+
+- Heuristika prava na prijevoz u profilima (sanitetski za kolica i nosila, putni nalog izvan mjesta prebivališta). Odlučiti o graničnim slučajevima: pokretni pacijent na dijalizi (`p04`) i pacijenti sa štapom na dugim relacijama (`p10`, `p15`).
+- Popis djelatnosti Opće bolnice Gospić, osobito dijaliza i onkologija.
+- Koja se zagrebačka bolnica koristi kao odredište (`kbc_zagreb` je nagađanje).
+- Gornje granice pomaka za klase hitnosti (3 i 30 dana).
+- Trajanja pregleda (medijan i 90. percentil) za sve kombinacije, osobito dijalizu i onkološke postupke.
+- Vremena ukrcaja po klasi pokretljivosti.
+- Težine faktora bodovanja i njihov zbroj (1,0), pojasevi (udaljenost, dob, propušteni pregledi), vrijednosti za vrstu telefona i klasu pokretljivosti.
+- Preklapanje faktora "Dostupnost pratnje" i "Živi sam" (dvostruko brojanje).
+- Pragovi razina usluge (0,35 i 0,60) i pomoć koju dodaje svaka razina.

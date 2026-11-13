@@ -1,0 +1,90 @@
+# Šifrarnici hitnosti i trajanja pregleda (E13-T2, KAN-88).
+# Ulaz za E1-T2 (šifrarnici) i E4-T2 (zadana pravila prediktora).
+# SINTETIČKI NACRT: sve vrijednosti su procjene, ne klinički podaci.
+# Ključevi su engleski (kod), natpisi hrvatski (sučelje).
+
+departments:
+  - key: internal_medicine
+    label: Interna medicina
+  - key: cardiology
+    label: Kardiologija
+  - key: ophthalmology
+    label: Oftalmologija
+  - key: orthopaedics
+    label: Ortopedija
+  - key: neurology
+    label: Neurologija
+  - key: radiology
+    label: Radiologija
+  - key: oncology
+    label: Onkologija
+  - key: dialysis
+    label: Dijaliza
+# REVIEW: provjeriti koje djelatnosti Opća bolnica Gospić zaista ima (osobito dijalizu i onkologiju);
+#         popis je veličine za demo, ne preslika bolnice.
+
+visit_types:
+  - key: first_visit
+    label: Prvi pregled
+  - key: follow_up
+    label: Kontrolni pregled
+  - key: procedure_test
+    label: Zahvat ili pretraga
+  - key: dialysis_session
+    label: Dijaliza (seansa)
+
+# max_shift_days: koliko se dana termin smije pomaknuti od željenog datuma.
+# unserved_penalty_rank: samo poredak (veći broj = veća kazna za neposlužen zahtjev);
+#   stvarne brojeve kazni određuje planer.
+# Napomena (pravilo 1): rang kazne je samo poredak hitnosti; nikad razlog da se netko izostavi iz plana.
+urgency_classes:
+  - key: fixed
+    label: Ne smije se pomaknuti
+    max_shift_days: 0
+    unserved_penalty_rank: 4
+  - key: within_few_days
+    label: U roku od nekoliko dana
+    max_shift_days: 3        # REVIEW: je li 3 dana razumna gornja granica?
+    unserved_penalty_rank: 3
+  - key: within_week
+    label: U roku od tjedan dana
+    max_shift_days: 7
+    unserved_penalty_rank: 2
+  - key: within_month
+    label: U roku od mjesec dana
+    max_shift_days: 30       # REVIEW: je li 30 dana razumna gornja granica?
+    unserved_penalty_rank: 1
+
+# Trajanje pregleda u minutama po djelatnosti i vrsti pregleda.
+# median_min: procjena iskorištenosti vozila; p90_min: prozor povratne vožnje (ARHITEKTURA §8).
+# Navedene su samo smislene kombinacije.
+# REVIEW: sva trajanja su procjene bez izvora; domenski član tima treba ih ispraviti.
+visit_durations:
+  - {department: internal_medicine, visit_type: first_visit,      median_min: 45,  p90_min: 75}
+  - {department: internal_medicine, visit_type: follow_up,        median_min: 25,  p90_min: 45}
+  - {department: internal_medicine, visit_type: procedure_test,   median_min: 60,  p90_min: 100}
+  - {department: cardiology,        visit_type: first_visit,      median_min: 50,  p90_min: 80}
+  - {department: cardiology,        visit_type: follow_up,        median_min: 30,  p90_min: 50}
+  - {department: cardiology,        visit_type: procedure_test,   median_min: 70,  p90_min: 120}  # npr. UZV srca, ergometrija
+  - {department: ophthalmology,     visit_type: first_visit,      median_min: 45,  p90_min: 80}
+  - {department: ophthalmology,     visit_type: follow_up,        median_min: 25,  p90_min: 45}
+  - {department: ophthalmology,     visit_type: procedure_test,   median_min: 60,  p90_min: 100}
+  - {department: orthopaedics,      visit_type: first_visit,      median_min: 40,  p90_min: 70}
+  - {department: orthopaedics,      visit_type: follow_up,        median_min: 25,  p90_min: 45}
+  - {department: orthopaedics,      visit_type: procedure_test,   median_min: 75,  p90_min: 120}
+  - {department: neurology,         visit_type: first_visit,      median_min: 50,  p90_min: 85}
+  - {department: neurology,         visit_type: follow_up,        median_min: 30,  p90_min: 50}
+  - {department: neurology,         visit_type: procedure_test,   median_min: 70,  p90_min: 120}  # npr. EMNG, EEG
+  - {department: radiology,         visit_type: procedure_test,   median_min: 40,  p90_min: 75}   # npr. RTG, UZV, CT
+  - {department: oncology,          visit_type: first_visit,      median_min: 60,  p90_min: 100}
+  - {department: oncology,          visit_type: follow_up,        median_min: 40,  p90_min: 70}
+  - {department: oncology,          visit_type: procedure_test,   median_min: 120, p90_min: 200}  # REVIEW: jako ovisi o protokolu
+  - {department: dialysis,          visit_type: dialysis_session, median_min: 240, p90_min: 270}  # REVIEW: provjeriti trajanje seanse
+
+# Vrijeme ukrcaja (zaustavljanje na adresi) u minutama po klasi pokretljivosti (E4-T2).
+# REVIEW: sve vrijednosti su procjene; provjeriti sa sanitetskim vozačem.
+boarding_time_min:
+  walks: 3
+  cane: 5
+  wheelchair: 10
+  stretcher: 15
