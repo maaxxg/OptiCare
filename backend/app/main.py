@@ -45,7 +45,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         except SQLAlchemyError as exc:
             # Do not include the exception text: it can contain the connection URL.
             raise StartupCheckError(
-                f"Database is unreachable ({type(exc).__name__}); check DATABASE_URL and that the db service is up"
+                f"Database is unreachable ({type(exc).__name__}); "
+                "check DATABASE_URL and that the db service is up"
             ) from None
         logger.info("PostGIS %s detected", version)
     yield
