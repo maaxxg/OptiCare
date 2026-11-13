@@ -407,6 +407,14 @@ class Patient(Base):
         return f"{self.first_name} {self.last_name}".strip()
 
     @property
+    def mbo_masked(self) -> str:
+        return "*****" + self.mbo[-4:]
+
+    def __repr__(self) -> str:
+        # Never include the MBO (or other personal data) in reprs/logs.
+        return f"<Patient id={self.id!r}>"
+
+    @property
     def latitude(self) -> float | None:
         coords = extract_lon_lat(self.location)
         return coords[1] if coords else None

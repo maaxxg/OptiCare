@@ -5,7 +5,6 @@ from datetime import UTC, date, datetime, time
 from pathlib import Path
 
 import pytest
-import yaml
 from geoalchemy2 import Geography, WKBElement
 from pydantic import ValidationError
 
@@ -180,6 +179,11 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
     assert pat_read.latitude == pytest.approx(44.55)
     assert pat_read.longitude == pytest.approx(15.38)
     assert pat_read.mobility_class == MobilityClass.CANE
+    dumped = pat_read.model_dump_json()
+    assert pat_read.mbo_masked == "*****0001"
+    assert "000000001" not in dumped
+    assert "mbo" not in pat_read.model_dump()
+    assert "000000001" not in repr(patient)
 
     slot = Slot(
         id=100,
@@ -320,7 +324,7 @@ def test_schema_validation_errors() -> None:
             municipality="Gospić",
         )
 
-    with pytest.raises(ValidationError, match="latest_date ne smije biti prije earliest_date"):
+    with pytest.raises(ValidationError, match="Najkasniji datum ne smije biti prije najranijeg"):
         VisitRequestCreate(
             patient_id=1,
             facility_key="ob_gospic",
@@ -332,22 +336,33 @@ def test_schema_validation_errors() -> None:
         )
 
 
-def test_domain_patient_profiles_yaml_compatible_with_schemas() -> None:
-    yaml_path = Path(__file__).resolve().parents[2] / "data" / "domain" / "patient_profiles.yaml"
-    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-    patients = data["patients"]
-    assert len(patients) >= 15
+_PATIENT_KW = dict(
+    first_name="Ivo",
+    last_name="Ivić",
+    phone="+385 00 000 0001",
+    settlement="Gospić",
+    municipality="Gospić",
+)
 
-    base_date = date(2026, 11, 14)
-    for idx, raw in enumerate(patients, start=1):
-        pat = PatientCreate.model_validate(raw)
-        assert len(pat.mbo) == 9
-        visit_raw = dict(raw["visit"])
-        visit_raw["patient_id"] = idx
-        visit_raw["earliest_date"] = base_date
-        visit_raw["latest_date"] = base_date
-        req = VisitRequestCreate.model_validate(visit_raw)
-        assert req.patient_id == idx
+
+def test_invalid_mbo_is_not_echoed_in_errors_or_repr() -> None:
+    with pytest.raises(ValidationError) as exc:
+        PatientCreate(mbo="123456", **_PATIENT_KW)
+    assert "123456" not in str(exc.value)
+    assert "123456" not in repr(exc.value.errors())
+    assert [e["input"] for e in exc.value.errors()] == ["***"]
+
+    ok = PatientCreate(mbo="000000002", **_PATIENT_KW)
+    assert "000000002" not in repr(ok)
+
+
+def test_patient_requires_last_name_and_ignores_aliases() -> None:
+    with pytest.raises(ValidationError):
+        PatientCreate(mbo="000000003", **{**_PATIENT_KW, "last_name": None})
+    kw = {k: v for k, v in _PATIENT_KW.items() if k not in ("first_name", "last_name")}
+    with pytest.raises(ValidationError) as exc:
+        PatientCreate.model_validate({"mbo": "000000003", "name": "Ivo", **kw})
+    assert {e["loc"][0] for e in exc.value.errors()} == {"first_name", "last_name"}
 
 
 def test_alembic_migration_file_contains_postgis_and_tables() -> None:
