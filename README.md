@@ -73,4 +73,15 @@ cd frontend && npm run check:all       # prettier, eslint, svelte-check
 
 GitHub Actions (`.github/workflows/ci.yml`) pokreće obje provjere na svaki push na `main` i na svaki pull request; backend testovi tada rade nad PostGIS servisom.
 
-Test baze (`backend/tests/test_db_postgis.py`) je opcionalan i lokalno se preskače. Za pokretanje: `docker compose up db`, zatim `cd backend && RUN_DB_TESTS=1 uv run pytest tests/test_db_postgis.py` (PowerShell: `$env:RUN_DB_TESTS=1; uv run pytest tests/test_db_postgis.py`).
+Testovi baze (`backend/tests/test_db_postgis.py`, `backend/tests/test_db_schema.py`) su opcionalni i lokalno se preskaču. Za pokretanje: `docker compose up db`, zatim `cd backend && RUN_DB_TESTS=1 uv run pytest tests/test_db_postgis.py tests/test_db_schema.py` (PowerShell: `$env:RUN_DB_TESTS=1; uv run pytest tests/test_db_postgis.py tests/test_db_schema.py`). Testovi sheme sami pokreću migracije (`upgrade head`, `downgrade base`) nad bazom iz `DATABASE_URL`, pa je koriste samo za razvojnu bazu: na kraju svakog testa shema se vraća na prazno stanje.
+
+## Migracije baze
+
+Shema se primjenjuje Alembicom. Prvo pokreni bazu (`docker compose up db`), zatim:
+
+```sh
+cd backend
+uv run alembic upgrade head
+```
+
+(PowerShell: isto, `cd backend; uv run alembic upgrade head`.) Povratak na prazno stanje: `uv run alembic downgrade base`. Iz kontejnera: `docker compose exec backend alembic upgrade head`, ako je backend pokrenut preko Composea.

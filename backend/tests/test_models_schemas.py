@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import struct
 from datetime import UTC, date, datetime, time
-from pathlib import Path
 
 import pytest
 from geoalchemy2 import Geography, WKBElement
@@ -422,22 +421,3 @@ def test_patient_requires_last_name_and_ignores_aliases() -> None:
     with pytest.raises(ValidationError) as exc:
         PatientCreate.model_validate({"mbo": "000000003", "name": "Ivo", **kw})
     assert {e["loc"][0] for e in exc.value.errors()} == {"first_name", "last_name"}
-
-
-def test_alembic_migration_file_contains_postgis_and_tables() -> None:
-    migration_path = (
-        Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0001_initial_schema.py"
-    )
-    content = migration_path.read_text(encoding="utf-8")
-    assert "CREATE EXTENSION IF NOT EXISTS postgis" in content
-    for table_name in (
-        "municipalities",
-        "facilities",
-        "patients",
-        "slots",
-        "visit_requests",
-        "vehicles",
-        "assignments",
-        "trip_logs",
-    ):
-        assert f'"{table_name}"' in content
