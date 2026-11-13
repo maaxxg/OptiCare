@@ -1,0 +1,104 @@
+# Faktori i težine bodovanja potrebe za podrškom (E13-T3, KAN-89). Ulaz za E3-T1.
+# SINTETIČKI NACRT: težine, pojasevi i pragovi su procjene za pregled domenskog člana tima.
+#
+# PRAVILO (CLAUDE.md, pravilo 1): bodovi i razine SAMO DODAJU pomoć. Nijedan faktor, prag ni
+# razina ne smije ukloniti, odbiti ni deprioritizirati pacijenta. Visoka razina znači više pomoći,
+# nikad manje prava ili manji prioritet.
+#
+# Svaki faktor daje vrijednost 0-1 (0 = nije potrebna dodatna podrška, 1 = najveća potreba).
+# Ukupni bod = zbroj (težina * vrijednost). Težine zbrojene daju 1.0, pa je bod u rasponu 0-1.
+# Pojasevi (bands) se čitaju od vrha: prvi pojas čiji je "max" veći od vrijednosti vrijedi
+# (gornja granica isključiva); max: null znači bez gornje granice.
+# Kod logičkih faktora: if_true / if_false.
+
+factors:
+  - key: mobility_class
+    label: Pokretljivost
+    weight: 0.22              # REVIEW: težina
+    mapping:                  # tablica po klasi pokretljivosti
+      walks: 0.0
+      cane: 0.4               # REVIEW: vrijednosti
+      wheelchair: 0.8
+      stretcher: 1.0
+    rationale: Slabija pokretljivost znači više pomoći pri ukrcaju i na putu.
+
+  - key: distance_to_destination
+    label: Udaljenost do odredišta
+    weight: 0.18              # REVIEW: težina
+    unit: km                  # cestovna udaljenost
+    bands:                    # REVIEW: pojasevi u km
+      - {max: 20,   value: 0.0}
+      - {max: 50,   value: 0.4}
+      - {max: 100,  value: 0.7}
+      - {max: null, value: 1.0}
+    rationale: Dulji put je zahtjevniji, a tolerancija na kašnjenje manja.
+
+  - key: age
+    label: Dob
+    weight: 0.15              # REVIEW: težina
+    unit: years
+    bands:                    # REVIEW: pojasevi u godinama
+      - {max: 65,   value: 0.0}
+      - {max: 75,   value: 0.4}
+      - {max: 85,   value: 0.7}
+      - {max: null, value: 1.0}
+    rationale: Starijim osobama češće treba dodatna pomoć i podsjetnik.
+
+  - key: lives_alone
+    label: Živi sam
+    weight: 0.15              # REVIEW: težina
+    if_true: 1.0
+    if_false: 0.0
+    rationale: Tko živi sam, nema kod kuće nikoga tko bi podsjetio ili pomogao.
+
+  - key: missed_visits_last_year
+    label: Propušteni pregledi u zadnjih godinu dana
+    weight: 0.12              # REVIEW: težina
+    unit: count
+    bands:                    # REVIEW: pojasevi
+      - {max: 1,    value: 0.0}   # 0 propuštenih
+      - {max: 2,    value: 0.5}   # 1 propušten
+      - {max: null, value: 1.0}   # 2 ili više
+    rationale: Raniji propušteni pregled upozorava da pacijentu treba dodatan podsjetnik.
+
+  - key: phone_type
+    label: Vrsta telefona
+    weight: 0.10              # REVIEW: težina
+    mapping:                  # REVIEW: vrijednosti
+      smartphone: 0.0
+      basic_mobile: 0.5
+      landline: 1.0
+    rationale: Bez pametnog telefona poruku je teže vidjeti pa je potreban poziv.
+
+  - key: companion_available
+    label: Dostupnost pratnje
+    weight: 0.08              # REVIEW: težina; preklapa se s faktorom "Živi sam", provjeriti je li dvostruko brojanje prihvatljivo
+    if_true: 0.0
+    if_false: 1.0
+    rationale: Bez pratnje pacijent sve obavlja sam pa treba više pomoći.
+
+# Razine usluge po ukupnom bodu (donja granica uključiva, gornja isključiva).
+# Razina bira samo pomoć koja se DODAJE.
+# REVIEW: pragovi
+levels:
+  - key: low
+    label: Niska
+    min_score: 0.0
+    max_score: 0.35
+    adds_help:
+      - Obavijest o terminu SMS-om.
+  - key: medium
+    label: Srednja
+    min_score: 0.35
+    max_score: 0.60
+    adds_help:
+      - Obavijest o terminu SMS-om.
+      - Podsjetni poziv dan prije termina.
+  - key: high
+    label: Visoka
+    min_score: 0.60
+    max_score: 1.01           # 1.01 pokriva i točno 1.0
+    adds_help:
+      - Prijevoz od vrata do vrata uz pomoć vozača.
+      - Podsjetni poziv dan prije termina.
+      - Fleksibilan termin gdje je moguće.
