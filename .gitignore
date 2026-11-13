@@ -1,0 +1,24 @@
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+misc/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Node
+node_modules/
+.svelte-kit/
+build/
+
+# Plan razvoja (vodi se u Jiri)
+docs/PLAN_RAZVOJA.md
