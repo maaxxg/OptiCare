@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import re
-import struct
 from datetime import UTC, date, datetime, time
 from enum import StrEnum
 from typing import Any
 
 from geoalchemy2 import Geography, WKBElement, WKTElement
+from geoalchemy2.shape import to_shape
 from sqlalchemy import (
-     Boolean,
+    Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -17,7 +17,6 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
-    Text,
     Time,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -29,40 +28,10 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _normalize_token(val: str) -> str:
-    """Normalize Croatian diacritics, spaces, and hyphens for flexible enum matching."""
-    t = val.strip().lower().replace("-", "_").replace(" ", "_")
-    replacements = {
-        "č": "c",
-        "ć": "c",
-        "đ": "d",
-        "š": "s",
-        "ž": "z",
-    }
-    for src, dst in replacements.items():
-        t = t.replace(src, dst)
-    return t
-
-
 class PhoneType(StrEnum):
     LANDLINE = "landline"
     BASIC_MOBILE = "basic_mobile"
     SMARTPHONE = "smartphone"
-
-    @classmethod
-    def _missing_(cls, value: object) -> PhoneType | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "fiksni": cls.LANDLINE,
-            "obicni_mobitel": cls.BASIC_MOBILE,
-            "pametni_telefon": cls.SMARTPHONE,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
 
 
 class MobilityClass(StrEnum):
@@ -71,42 +40,11 @@ class MobilityClass(StrEnum):
     WHEELCHAIR = "wheelchair"
     STRETCHER = "stretcher"
 
-    @classmethod
-    def _missing_(cls, value: object) -> MobilityClass | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "hoda": cls.WALKS,
-            "stap": cls.CANE,
-            "kolica": cls.WHEELCHAIR,
-            "nosila": cls.STRETCHER,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
-
 
 class TransportEntitlement(StrEnum):
     SANITETSKI = "sanitetski"
     TRAVEL_ORDER = "travel_order"
     NONE = "none"
-
-    @classmethod
-    def _missing_(cls, value: object) -> TransportEntitlement | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "sanitetski_prijevoz": cls.SANITETSKI,
-            "putni_nalog": cls.TRAVEL_ORDER,
-            "nista": cls.NONE,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
 
 
 class Department(StrEnum):
@@ -136,57 +74,18 @@ class UrgencyClass(StrEnum):
 
 class VehicleProviderType(StrEnum):
     SANITETSKI = "sanitetski"
-    CRVENI_KRIZ = "crveni_kriz"
-    OPCINSKI = "opcinski"
-    VOLONTER = "volonter"
-    TAKSI = "taksi"
-    PACIJENT_VOZAC = "pacijent_vozac"
-    JAVNI_PRIJEVOZ = "javni_prijevoz"
-
-    @classmethod
-    def _missing_(cls, value: object) -> VehicleProviderType | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "sanitetski_prijevoz": cls.SANITETSKI,
-            "red_cross": cls.CRVENI_KRIZ,
-            "municipal": cls.OPCINSKI,
-            "opcinski_prijevoz": cls.OPCINSKI,
-            "volunteer": cls.VOLONTER,
-            "taxi": cls.TAKSI,
-            "patient_driver": cls.PACIJENT_VOZAC,
-            "public_transit": cls.JAVNI_PRIJEVOZ,
-            "lika_line": cls.JAVNI_PRIJEVOZ,
-            "autobus": cls.JAVNI_PRIJEVOZ,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
+    RED_CROSS = "red_cross"
+    MUNICIPAL = "municipal"
+    VOLUNTEER = "volunteer"
+    TAXI = "taxi"
+    PATIENT_DRIVER = "patient_driver"
 
 
 class AssignmentStatus(StrEnum):
-    PREDLOZENO = "predlozeno"
-    POTVRDENO = "potvrdeno"
-    IZMIJENJENO = "izmijenjeno"
-    OBAVLJENO = "obavljeno"
-
-    @classmethod
-    def _missing_(cls, value: object) -> AssignmentStatus | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "proposed": cls.PREDLOZENO,
-            "confirmed": cls.POTVRDENO,
-            "modified": cls.IZMIJENJENO,
-            "completed": cls.OBAVLJENO,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    MODIFIED = "modified"
+    COMPLETED = "completed"
 
 
 class RequestStatus(StrEnum):
@@ -197,34 +96,16 @@ class RequestStatus(StrEnum):
 
 
 class DriverStatusEvent(StrEnum):
-    STIGAO = "stigao"
-    UKRCAN = "ukrcan"
-    ISKRCAN = "iskrcan"
-    PACIJENTA_NEMA = "pacijenta_nema"
-    KASNIM = "kasnim"
-
-    @classmethod
-    def _missing_(cls, value: object) -> DriverStatusEvent | None:
-        if not isinstance(value, str):
-            return None
-        norm = _normalize_token(value)
-        aliases = {
-            "arrived": cls.STIGAO,
-            "boarded": cls.UKRCAN,
-            "dropped_off": cls.ISKRCAN,
-            "no_show": cls.PACIJENTA_NEMA,
-            "late": cls.KASNIM,
-        }
-        for member in cls:
-            if member.value == norm:
-                return member
-        return aliases.get(norm)
+    ARRIVED = "arrived"
+    BOARDED = "boarded"
+    DROPPED_OFF = "dropped_off"
+    PATIENT_ABSENT = "patient_absent"
+    RUNNING_LATE = "running_late"
 
 
-_POINT_WKT_RE = re.compile(
-    r"POINT\s*\(\s*([-+]?\d+(?:\.\d+)?)\s+([-+]?\d+(?:\.\d+)?)\s*\)",
-    re.IGNORECASE,
-)
+def _in_check(column: str, enum_cls: type[StrEnum], name: str) -> CheckConstraint:
+    values = ", ".join(f"'{m.value}'" for m in enum_cls)
+    return CheckConstraint(f"{column} IN ({values})", name=name)
 
 
 def make_point_wkt(lat: float, lon: float) -> WKTElement:
@@ -242,38 +123,13 @@ def make_multipolygon_wkt(wkt: str) -> WKTElement:
 
 
 def extract_lon_lat(geom: Any) -> tuple[float, float] | None:
-    """Extract (lon, lat) from a GeoAlchemy2 WKTElement, WKBElement, dict, or tuple without requiring C-extensions."""
-    if geom is None:
+    """Return (lon, lat) of a Point stored as WKTElement/WKBElement, else None."""
+    if not isinstance(geom, (WKTElement, WKBElement)):
         return None
-    if isinstance(geom, WKTElement):
-        match = _POINT_WKT_RE.search(geom.data)
-        if match:
-            return float(match.group(1)), float(match.group(2))
+    shape = to_shape(geom)
+    if shape.geom_type != "Point":
         return None
-    if isinstance(geom, WKBElement):
-        raw = bytes(geom.data)
-        if len(raw) < 21:
-            return None
-        endian = "<" if raw[0] == 1 else ">"
-        (geom_type,) = struct.unpack(f"{endian}I", raw[1:5])
-        offset = 5
-        # EWKB SRID flag (0x20000000)
-        if geom_type & 0x20000000:
-            offset += 4
-        if (geom_type & 0xFF) != 1 or len(raw) < offset + 16:
-            return None
-        lon, lat = struct.unpack(f"{endian}dd", raw[offset : offset + 16])
-        return float(lon), float(lat)
-    if isinstance(geom, str):
-        match = _POINT_WKT_RE.search(geom)
-        if match:
-            return float(match.group(1)), float(match.group(2))
-        return None
-    if isinstance(geom, dict) and "lat" in geom and "lon" in geom:
-        return float(geom["lon"]), float(geom["lat"])
-    if isinstance(geom, (tuple, list)) and len(geom) == 2:
-        return float(geom[0]), float(geom[1])
-    return None
+    return float(shape.x), float(shape.y)
 
 
 visit_request_candidate_slots = Table(
@@ -301,7 +157,7 @@ class Municipality(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
-    county: Mapped[str] = mapped_column(String(120), nullable=False, default="Ličko-senjska")
+    county: Mapped[str] = mapped_column(String(120), nullable=False)
     population_65_plus_share: Mapped[float | None] = mapped_column(Float, nullable=True)
     boundary: Mapped[Any] = mapped_column(
         Geography(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=True),
@@ -321,7 +177,7 @@ class Facility(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     settlement: Mapped[str] = mapped_column(String(120), nullable=False)
     municipality: Mapped[str] = mapped_column(String(120), nullable=False)
-    county: Mapped[str] = mapped_column(String(120), nullable=False, default="Ličko-senjska")
+    county: Mapped[str] = mapped_column(String(120), nullable=False)
     location: Mapped[Any] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
@@ -347,6 +203,13 @@ class Patient(Base):
     """Pacijent prema odjeljku 4 arhitekture."""
 
     __tablename__ = "patients"
+    __table_args__ = (
+        _in_check("mobility_class", MobilityClass, "ck_patients_mobility_class"),
+        _in_check(
+            "transport_entitlement", TransportEntitlement, "ck_patients_transport_entitlement"
+        ),
+        _in_check("phone_type", PhoneType, "ck_patients_phone_type"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     key: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True, index=True)
@@ -362,7 +225,7 @@ class Patient(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     settlement: Mapped[str] = mapped_column(String(120), nullable=False)
     municipality: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
-    county: Mapped[str] = mapped_column(String(120), nullable=False, default="Ličko-senjska")
+    county: Mapped[str] = mapped_column(String(120), nullable=False)
     location: Mapped[Any | None] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=True,
@@ -383,16 +246,11 @@ class Patient(Base):
 
     own_car: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     carpool_driver_seats: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    carpool_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    carpool_rider_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    driver_registration_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    driver_insurance_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    driver_license_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    volunteer_partner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    driver_documents_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     missed_visits_last_year: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    consent_given: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    story: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
@@ -411,6 +269,14 @@ class Patient(Base):
         return f"{self.first_name} {self.last_name}".strip()
 
     @property
+    def mbo_masked(self) -> str:
+        return "*****" + self.mbo[-4:]
+
+    def __repr__(self) -> str:
+        # Never include the MBO (or other personal data) in reprs/logs.
+        return f"<Patient id={self.id!r}>"
+
+    @property
     def latitude(self) -> float | None:
         coords = extract_lon_lat(self.location)
         return coords[1] if coords else None
@@ -427,14 +293,8 @@ class Slot(Base):
     __tablename__ = "slots"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    facility_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("facilities.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    facility_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    facility_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    facility_location: Mapped[Any | None] = mapped_column(
-        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
-        nullable=True,
+    facility_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     department: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     start_time: Mapped[datetime] = mapped_column(
@@ -443,7 +303,7 @@ class Slot(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
-    facility: Mapped[Facility | None] = relationship("Facility", back_populates="slots")
+    facility: Mapped[Facility] = relationship("Facility", back_populates="slots")
     candidate_for_requests: Mapped[list[VisitRequest]] = relationship(
         "VisitRequest",
         secondary=visit_request_candidate_slots,
@@ -453,37 +313,27 @@ class Slot(Base):
 
     @property
     def latitude(self) -> float | None:
-        coords = extract_lon_lat(self.facility_location)
-        if coords:
-            return coords[1]
-        if self.facility is not None:
-            return self.facility.latitude
-        return None
+        return self.facility.latitude if self.facility is not None else None
 
     @property
     def longitude(self) -> float | None:
-        coords = extract_lon_lat(self.facility_location)
-        if coords:
-            return coords[0]
-        if self.facility is not None:
-            return self.facility.longitude
-        return None
+        return self.facility.longitude if self.facility is not None else None
 
 
 class VisitRequest(Base):
     """Zahtjev za pregled prema odjeljku 4 arhitekture."""
 
     __tablename__ = "visit_requests"
+    __table_args__ = (_in_check("status", RequestStatus, "ck_visit_requests_status"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     referral_ref: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    facility_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("facilities.id", ondelete="SET NULL"), nullable=True, index=True
+    facility_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("facilities.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    facility_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     department: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     visit_type: Mapped[str] = mapped_column(String(64), nullable=False)
     urgency_class: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -500,7 +350,7 @@ class VisitRequest(Base):
     )
 
     patient: Mapped[Patient] = relationship("Patient", back_populates="visit_requests")
-    facility: Mapped[Facility | None] = relationship("Facility", back_populates="visit_requests")
+    facility: Mapped[Facility] = relationship("Facility", back_populates="visit_requests")
     candidate_slots: Mapped[list[Slot]] = relationship(
         "Slot",
         secondary=visit_request_candidate_slots,
@@ -515,6 +365,7 @@ class Vehicle(Base):
     """Vozilo prema odjeljku 4 arhitekture."""
 
     __tablename__ = "vehicles"
+    __table_args__ = (_in_check("provider_type", VehicleProviderType, "ck_vehicles_provider_type"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     key: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
@@ -536,7 +387,6 @@ class Vehicle(Base):
     patient_driver_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    has_driver_assistance: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     patient_driver: Mapped[Patient | None] = relationship("Patient", back_populates="vehicles")
@@ -561,6 +411,7 @@ class Assignment(Base):
     """Dodjela termina i vozila zahtjevu pacijenta."""
 
     __tablename__ = "assignments"
+    __table_args__ = (_in_check("status", AssignmentStatus, "ck_assignments_status"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     request_id: Mapped[int] = mapped_column(
@@ -573,9 +424,6 @@ class Assignment(Base):
         Integer, ForeignKey("vehicles.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     return_vehicle_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
-    )
-    backup_vehicle_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
     )
 
@@ -596,12 +444,11 @@ class Assignment(Base):
     status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default=AssignmentStatus.PREDLOZENO.value,
+        default=AssignmentStatus.PROPOSED.value,
         index=True,
     )
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    carpool_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carpool_driver_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
@@ -618,9 +465,6 @@ class Assignment(Base):
     return_vehicle: Mapped[Vehicle | None] = relationship(
         "Vehicle", foreign_keys=[return_vehicle_id]
     )
-    backup_vehicle: Mapped[Vehicle | None] = relationship(
-        "Vehicle", foreign_keys=[backup_vehicle_id]
-    )
     trip_logs: Mapped[list[TripLog]] = relationship(
         "TripLog", back_populates="assignment", cascade="all, delete-orphan"
     )
@@ -630,6 +474,9 @@ class TripLog(Base):
     """Stvarna vremena vožnje i pregleda (ulaz za treniranje ML modela)."""
 
     __tablename__ = "trip_logs"
+    __table_args__ = (
+        _in_check("driver_status_event", DriverStatusEvent, "ck_trip_logs_driver_status_event"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     assignment_id: Mapped[int | None] = mapped_column(
@@ -664,7 +511,6 @@ class TripLog(Base):
     elevator: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     companion: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     patient_age: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

@@ -4,7 +4,16 @@ import re
 from datetime import date, datetime, time
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ModelWrapValidatorHandler,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from app.models import (
     AssignmentStatus,
@@ -33,12 +42,12 @@ class GeoPoint(BaseModel):
 def _coerce_geopoint(val: Any) -> GeoPoint | None:
     if val is None or isinstance(val, GeoPoint):
         return val
+    if isinstance(val, dict) and "lat" in val and "lon" in val:
+        return GeoPoint(lat=float(val["lat"]), lon=float(val["lon"]))
     coords = extract_lon_lat(val)
     if coords is not None:
         lon, lat = coords
         return GeoPoint(lat=lat, lon=lon)
-    if isinstance(val, dict) and "lat" in val and "lon" in val:
-        return GeoPoint(lat=float(val["lat"]), lon=float(val["lon"]))
     return None
 
 
@@ -49,7 +58,7 @@ def _coerce_geopoint(val: Any) -> GeoPoint | None:
 
 class MunicipalityBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     population_65_plus_share: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
@@ -75,7 +84,7 @@ class FacilityBase(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     settlement: str = Field(..., min_length=1, max_length=120)
     municipality: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     location: GeoPoint
 
     @field_validator("location", mode="before")
@@ -103,18 +112,19 @@ class FacilityRead(FacilityBase):
 
 
 class PatientBase(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     key: str | None = Field(default=None, max_length=32)
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     birth_year: int | None = Field(default=None, ge=1900, le=2100)
-    mbo: str = Field(..., description="Matični broj osigurane osobe (9 znamenki)")
     phone: str = Field(..., min_length=3, max_length=40)
     phone_type: PhoneType = Field(default=PhoneType.LANDLINE)
 
     address: str | None = Field(default=None, max_length=255)
     settlement: str = Field(..., min_length=1, max_length=120)
     municipality: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     location: GeoPoint | None = None
 
     mobility_class: MobilityClass = Field(default=MobilityClass.WALKS)
@@ -128,44 +138,10 @@ class PatientBase(BaseModel):
 
     own_car: bool = False
     carpool_driver_seats: int = Field(default=0, ge=0, le=8)
-    carpool_consent: bool = False
-
-    driver_registration_valid: bool = False
-    driver_insurance_valid: bool = False
-    driver_license_valid: bool = False
-    volunteer_partner: str | None = Field(default=None, max_length=120)
+    carpool_rider_consent: bool = False
+    driver_documents_confirmed: bool = False
 
     missed_visits_last_year: int = Field(default=0, ge=0)
-    consent_given: bool = True
-    story: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_patient_inputs(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        out = dict(data)
-        # Allow a combined 'name' field if first_name/last_name are omitted
-        if "name" in out and ("first_name" not in out or "last_name" not in out):
-            parts = str(out["name"]).strip().split(None, 1)
-            out.setdefault("first_name", parts[0] if parts else "")
-            out.setdefault("last_name", parts[1] if len(parts) > 1 else "-")
-        # Allow 'expected_transport_entitlement' alias from patient_profiles.yaml
-        if "expected_transport_entitlement" in out and "transport_entitlement" not in out:
-            out["transport_entitlement"] = out["expected_transport_entitlement"]
-        # Allow lat/lon top-level convenience keys
-        if out.get("location") is None and "latitude" in out and "longitude" in out:
-            if out["latitude"] is not None and out["longitude"] is not None:
-                out["location"] = {"lat": out["latitude"], "lon": out["longitude"]}
-        return out
-
-    @field_validator("mbo")
-    @classmethod
-    def _validate_mbo(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not _MBO_RE.match(cleaned):
-            raise ValueError("MBO mora sadržavati točno 9 znamenki")
-        return cleaned
 
     @field_validator("location", mode="before")
     @classmethod
@@ -174,7 +150,49 @@ class PatientBase(BaseModel):
 
 
 class PatientCreate(PatientBase):
-    pass
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    mbo: str = Field(
+        ...,
+        repr=False,
+        description="Matični broj osigurane osobe (9 znamenki)",
+    )
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _mask_mbo_in_errors(cls, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
+        # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
+        # 422 bodies) still carries the input. Rebuild the error without the MBO value.
+        try:
+            return handler(data)
+        except ValidationError as exc:
+            lines: list[InitErrorDetails] = []
+            for err in exc.errors():
+                is_mbo = err["loc"][:1] == ("mbo",)
+                kind: Any = (
+                    PydanticCustomError(err["type"], err["msg"])
+                    if err["type"] == "mbo_format"
+                    else err["type"]
+                )
+                line: InitErrorDetails = {
+                    "type": kind,
+                    "loc": err["loc"],
+                    "input": "***" if is_mbo else err["input"],
+                }
+                if "ctx" in err and not is_mbo:
+                    line["ctx"] = err["ctx"]
+                lines.append(line)
+            raise ValidationError.from_exception_data(
+                cls.__name__, lines, hide_input=True
+            ) from None
+
+    @field_validator("mbo")
+    @classmethod
+    def _validate_mbo(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not _MBO_RE.match(cleaned):
+            raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
+        return cleaned
 
 
 class PatientUpdate(BaseModel):
@@ -197,14 +215,9 @@ class PatientUpdate(BaseModel):
     social_order_today: bool | None = None
     own_car: bool | None = None
     carpool_driver_seats: int | None = Field(default=None, ge=0, le=8)
-    carpool_consent: bool | None = None
-    driver_registration_valid: bool | None = None
-    driver_insurance_valid: bool | None = None
-    driver_license_valid: bool | None = None
-    volunteer_partner: str | None = None
+    carpool_rider_consent: bool | None = None
+    driver_documents_confirmed: bool | None = None
     missed_visits_last_year: int | None = Field(default=None, ge=0)
-    consent_given: bool | None = None
-    story: str | None = None
 
     @field_validator("location", mode="before")
     @classmethod
@@ -213,10 +226,11 @@ class PatientUpdate(BaseModel):
 
 
 class PatientRead(PatientBase):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, hide_input_in_errors=True)
 
     id: int
     name: str
+    mbo_masked: str
     latitude: float | None = None
     longitude: float | None = None
     created_at: datetime
@@ -229,19 +243,11 @@ class PatientRead(PatientBase):
 
 
 class SlotBase(BaseModel):
-    facility_id: int | None = None
-    facility_key: str = Field(..., min_length=1, max_length=64)
-    facility_name: str | None = Field(default=None, max_length=200)
-    facility_location: GeoPoint | None = None
+    facility_id: int
     department: Department
     start_time: datetime
     end_time: datetime | None = None
     capacity: int = Field(default=1, ge=1)
-
-    @field_validator("facility_location", mode="before")
-    @classmethod
-    def _validate_facility_location(cls, v: Any) -> Any:
-        return _coerce_geopoint(v)
 
 
 class SlotCreate(SlotBase):
@@ -264,8 +270,7 @@ class SlotRead(SlotBase):
 class VisitRequestBase(BaseModel):
     patient_id: int
     referral_ref: str | None = Field(default=None, max_length=64)
-    facility_id: int | None = None
-    facility_key: str = Field(..., min_length=1, max_length=64)
+    facility_id: int
     department: Department
     visit_type: VisitType
     urgency_class: UrgencyClass
@@ -276,20 +281,12 @@ class VisitRequestBase(BaseModel):
     slot_request_pending: bool = False
     status: RequestStatus = Field(default=RequestStatus.OPEN)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_visit_inputs(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        out = dict(data)
-        if "destination" in out and "facility_key" not in out:
-            out["facility_key"] = out["destination"]
-        return out
-
     @model_validator(mode="after")
     def _check_dates(self) -> VisitRequestBase:
         if self.latest_date < self.earliest_date:
-            raise ValueError("latest_date ne smije biti prije earliest_date")
+            raise PydanticCustomError(
+                "date_order", "Najkasniji datum ne smije biti prije najranijeg."
+            )
         return self
 
 
@@ -325,7 +322,6 @@ class VehicleBase(BaseModel):
     driver_name: str | None = Field(default=None, max_length=120)
     driver_phone: str | None = Field(default=None, max_length=40)
     patient_driver_id: int | None = None
-    has_driver_assistance: bool = True
     active: bool = True
 
     @field_validator("base_location", mode="before")
@@ -357,17 +353,15 @@ class AssignmentBase(BaseModel):
     slot_id: int
     vehicle_id: int
     return_vehicle_id: int | None = None
-    backup_vehicle_id: int | None = None
     pickup_time: datetime
     facility_arrival_time: datetime | None = None
     return_pickup_time: datetime | None = None
     home_dropoff_time: datetime | None = None
     pickup_order: int | None = Field(default=None, ge=0)
     return_order: int | None = Field(default=None, ge=0)
-    status: AssignmentStatus = Field(default=AssignmentStatus.PREDLOZENO)
+    status: AssignmentStatus = Field(default=AssignmentStatus.PROPOSED)
     is_locked: bool = False
-    carpool_confirmed: bool | None = None
-    distance_km: float | None = Field(default=None, ge=0.0)
+    carpool_driver_confirmed: bool | None = None
 
 
 class AssignmentCreate(AssignmentBase):
@@ -378,7 +372,6 @@ class AssignmentUpdate(BaseModel):
     slot_id: int | None = None
     vehicle_id: int | None = None
     return_vehicle_id: int | None = None
-    backup_vehicle_id: int | None = None
     pickup_time: datetime | None = None
     facility_arrival_time: datetime | None = None
     return_pickup_time: datetime | None = None
@@ -387,8 +380,7 @@ class AssignmentUpdate(BaseModel):
     return_order: int | None = Field(default=None, ge=0)
     status: AssignmentStatus | None = None
     is_locked: bool | None = None
-    carpool_confirmed: bool | None = None
-    distance_km: float | None = Field(default=None, ge=0.0)
+    carpool_driver_confirmed: bool | None = None
 
 
 class AssignmentRead(AssignmentBase):
@@ -422,7 +414,6 @@ class TripLogBase(BaseModel):
     elevator: bool | None = None
     companion: bool | None = None
     patient_age: int | None = Field(default=None, ge=0, le=120)
-    notes: str | None = None
 
 
 class TripLogCreate(TripLogBase):

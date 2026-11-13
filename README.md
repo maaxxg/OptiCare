@@ -55,9 +55,33 @@ npm run dev
 
 Postavke se čitaju iz varijabli okoline i neobveznog `.env` u korijenu repozitorija (vidi `.env.example`).
 
+### Prelazak s mock adaptera na stvarne servise
+
+Zadano je sve `mock` i radi bez mreže i bez ključeva. Za stvarne servise postavi u `.env`:
+
+- LLM (bilo koji OpenAI-kompatibilni poslužitelj): `LLM_BACKEND=api`, `LLM_BASE_URL` (do `/chat/completions`, bez tog nastavka), `LLM_MODEL` i, ako ga poslužitelj traži, `LLM_API_KEY`.
+- Rute: `ROUTING_BACKEND=ors` i `ORS_API_KEY` (po potrebi `ORS_BASE_URL`).
+
+Nakon izmjene ponovno pokreni backend. Za demo koristi samo sintetičke podatke jer upiti odlaze na vanjske servise.
+
 ## Provjere
 
 ```sh
-cd backend && uv run pytest
-cd frontend && npm run check
+cd backend && uv run python check.py   # ruff, format check, mypy, pytest
+cd frontend && npm run check:all       # prettier, eslint, svelte-check
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) pokreće obje provjere na svaki push na `main` i na svaki pull request; backend testovi tada rade nad PostGIS servisom.
+
+Testovi baze (`backend/tests/test_db_postgis.py`, `backend/tests/test_db_schema.py`) su opcionalni i lokalno se preskaču. Za pokretanje: `docker compose up db`, zatim `cd backend && RUN_DB_TESTS=1 uv run pytest tests/test_db_postgis.py tests/test_db_schema.py` (PowerShell: `$env:RUN_DB_TESTS=1; uv run pytest tests/test_db_postgis.py tests/test_db_schema.py`). Testovi sheme sami pokreću migracije (`upgrade head`, `downgrade base`) nad bazom iz `DATABASE_URL`, pa je koriste samo za razvojnu bazu: na kraju svakog testa shema se vraća na prazno stanje.
+
+## Migracije baze
+
+Shema se primjenjuje Alembicom. Prvo pokreni bazu (`docker compose up db`), zatim:
+
+```sh
+cd backend
+uv run alembic upgrade head
+```
+
+(PowerShell: isto, `cd backend; uv run alembic upgrade head`.) Povratak na prazno stanje: `uv run alembic downgrade base`. Iz kontejnera: `docker compose exec backend alembic upgrade head`, ako je backend pokrenut preko Composea.
