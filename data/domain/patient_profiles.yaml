@@ -12,6 +12,7 @@
 # social_order_today: pokretan pacijent koji bi DANAS vjerojatno dobio nalog za sanitetski prijevoz
 #   iz socijalnih razloga (plan, E1-T3); sustav ga ne šalje na sanitetsko vozilo (pravilo 7).
 # Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb (REVIEW: konkretna zagrebačka bolnica je nagađanje).
+# OB Gospić nema onkologiju; onkološki pregledi idu u KBC (kbc_rijeka, kbc_zagreb).
 
 patients:
   - key: p01
@@ -470,13 +471,13 @@ patients:
     carpool_consent: false
     missed_visits_last_year: 0
     visit:
-      destination: ob_gospic
+      destination: kbc_rijeka
       department: oncology
       visit_type: follow_up
       urgency_class: within_few_days
       earliest_offset_days: 1
       latest_offset_days: 3
-    story: Gospodin Ivezić iz Kutereva ide na onkološku kontrolu i ne smije kasniti. Pokretan je, a supruga ga prati.
+    story: Gospodin Ivezić iz Kutereva ide na onkološku kontrolu u Rijeku i ne smije kasniti. Pokretan je, a supruga ga prati.
 
   - key: p17
     first_name: Danica
