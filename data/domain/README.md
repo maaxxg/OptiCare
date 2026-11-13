@@ -14,13 +14,13 @@ Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je 
 
 - Bodovi i razine samo dodaju pomoć. Nijedan faktor, prag ni razina ne smije ukloniti ili zapostaviti pacijenta.
 - `expected_transport_entitlement` je očekivani prijedlog sustava, ne činjenica. Pravo utvrđuje izabrani liječnik.
+- Popis djelatnosti vrijedi za sve ustanove. OB Gospić ima sve navedene djelatnosti osim onkologije, pa onkološki pregledi idu u KBC (`p08`, `p16` u KBC Rijeka).
 - Pokretni pacijenti bez prava ne idu na sanitetska vozila. Oznaka `social_order_today: true` označava one koji bi danas vjerojatno dobili nalog iz socijalnih razloga.
 - Pacijenti-vozači (`p05`, `p07`) i potencijalni suputnici imaju `carpool_consent: true`; suputnici su samostalno pokretni.
 
 ## Otvorene stavke za pregled
 
 - Heuristika prava na prijevoz u profilima (sanitetski za kolica i nosila, putni nalog izvan mjesta prebivališta). Odlučiti o graničnim slučajevima: pokretni pacijent na dijalizi (`p04`) i pacijenti sa štapom na dugim relacijama (`p10`, `p15`).
-- Popis djelatnosti Opće bolnice Gospić, osobito dijaliza i onkologija.
 - Koja se zagrebačka bolnica koristi kao odredište (`kbc_zagreb` je nagađanje).
 - Gornje granice pomaka za klase hitnosti (3 i 30 dana).
 - Trajanja pregleda (medijan i 90. percentil) za sve kombinacije, osobito dijalizu i onkološke postupke.
