@@ -8,7 +8,7 @@ from typing import Any
 
 from geoalchemy2 import Geography, WKBElement, WKTElement
 from sqlalchemy import (
-     Boolean,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -238,7 +238,7 @@ def make_multipolygon_wkt(wkt: str) -> WKTElement:
 
 
 def extract_lon_lat(geom: Any) -> tuple[float, float] | None:
-    """Extract (lon, lat) from a GeoAlchemy2 WKTElement, WKBElement, dict, or tuple without requiring C-extensions."""
+    """Extract (lon, lat) from a WKTElement, WKBElement, dict or tuple without C-extensions."""
     if geom is None:
         return None
     if isinstance(geom, WKTElement):

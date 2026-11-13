@@ -22,7 +22,6 @@ class Base(DeclarativeBase):
                         setattr(self, attr_name, col.default.arg)
 
 
-
 engine = create_engine(get_settings().database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -33,4 +32,3 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-

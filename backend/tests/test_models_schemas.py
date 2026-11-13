@@ -35,13 +35,11 @@ from app.schemas import (
     AssignmentCreate,
     AssignmentRead,
     AssignmentUpdate,
-    FacilityCreate,
     FacilityRead,
     GeoPoint,
     MunicipalityCreate,
     PatientCreate,
     PatientRead,
-    SlotCreate,
     SlotRead,
     TripLogCreate,
     TripLogRead,
@@ -289,7 +287,9 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         id=500,
         assignment_id=log_in.assignment_id,
         actual_arrival_at_door=log_in.actual_arrival_at_door,
-        driver_status_event=log_in.driver_status_event.value if log_in.driver_status_event else None,
+        driver_status_event=log_in.driver_status_event.value
+        if log_in.driver_status_event
+        else None,
         recorded_by=log_in.recorded_by,
         created_at=now,
     )
@@ -352,10 +352,7 @@ def test_domain_patient_profiles_yaml_compatible_with_schemas() -> None:
 
 def test_alembic_migration_file_contains_postgis_and_tables() -> None:
     migration_path = (
-        Path(__file__).resolve().parents[1]
-        / "alembic"
-        / "versions"
-        / "0001_initial_schema.py"
+        Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0001_initial_schema.py"
     )
     content = migration_path.read_text(encoding="utf-8")
     assert "CREATE EXTENSION IF NOT EXISTS postgis" in content

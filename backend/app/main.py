@@ -64,4 +64,3 @@ def health() -> dict[str, str]:
 @app.get("/codebooks", response_model=Codebooks)
 def read_codebooks() -> Codebooks:
     return get_codebooks()
-

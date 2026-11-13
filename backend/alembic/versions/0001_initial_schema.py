@@ -5,10 +5,12 @@ Revises:
 Create Date: 2026-11-13 22:55:00
 
 """
+
 from collections.abc import Sequence
 
 import geoalchemy2
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0001_initial_schema"
@@ -208,9 +210,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_visit_requests_facility_key", "visit_requests", ["facility_key"], unique=False
     )
-    op.create_index(
-        "ix_visit_requests_department", "visit_requests", ["department"], unique=False
-    )
+    op.create_index("ix_visit_requests_department", "visit_requests", ["department"], unique=False)
     op.create_index(
         "ix_visit_requests_earliest_date", "visit_requests", ["earliest_date"], unique=False
     )

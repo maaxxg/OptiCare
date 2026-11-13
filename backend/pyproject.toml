@@ -20,6 +20,7 @@ dev = [
     "mypy>=2.4.1",
     "pytest>=8",
     "ruff>=0.17.5",
+    "types-pyyaml>=6.0.12.20261113",
 ]
 
 [tool.pytest.ini_options]
