@@ -30,9 +30,9 @@ def test_mobility_classes_and_boarding_times() -> None:
         MobilityClass.STRETCHER,
     ]
     assert get_boarding_time_min("walks") == 3
-    assert get_boarding_time_min("štap") == 5
-    assert get_boarding_time_min("kolica") == 10
-    assert get_boarding_time_min("nosila") == 15
+    assert get_boarding_time_min("cane") == 5
+    assert get_boarding_time_min("wheelchair") == 10
+    assert get_boarding_time_min("stretcher") == 15
     assert get_mobility_class_info("cane").label == "Štap"
 
 

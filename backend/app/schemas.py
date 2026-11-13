@@ -42,12 +42,12 @@ class GeoPoint(BaseModel):
 def _coerce_geopoint(val: Any) -> GeoPoint | None:
     if val is None or isinstance(val, GeoPoint):
         return val
+    if isinstance(val, dict) and "lat" in val and "lon" in val:
+        return GeoPoint(lat=float(val["lat"]), lon=float(val["lon"]))
     coords = extract_lon_lat(val)
     if coords is not None:
         lon, lat = coords
         return GeoPoint(lat=lat, lon=lon)
-    if isinstance(val, dict) and "lat" in val and "lon" in val:
-        return GeoPoint(lat=float(val["lat"]), lon=float(val["lon"]))
     return None
 
 
@@ -58,7 +58,7 @@ def _coerce_geopoint(val: Any) -> GeoPoint | None:
 
 class MunicipalityBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     population_65_plus_share: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
@@ -84,7 +84,7 @@ class FacilityBase(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     settlement: str = Field(..., min_length=1, max_length=120)
     municipality: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     location: GeoPoint
 
     @field_validator("location", mode="before")
@@ -124,7 +124,7 @@ class PatientBase(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     settlement: str = Field(..., min_length=1, max_length=120)
     municipality: str = Field(..., min_length=1, max_length=120)
-    county: str = Field(default="Ličko-senjska", max_length=120)
+    county: str = Field(..., min_length=1, max_length=120)
     location: GeoPoint | None = None
 
     mobility_class: MobilityClass = Field(default=MobilityClass.WALKS)
@@ -138,16 +138,10 @@ class PatientBase(BaseModel):
 
     own_car: bool = False
     carpool_driver_seats: int = Field(default=0, ge=0, le=8)
-    carpool_consent: bool = False
-
-    driver_registration_valid: bool = False
-    driver_insurance_valid: bool = False
-    driver_license_valid: bool = False
-    volunteer_partner: str | None = Field(default=None, max_length=120)
+    carpool_rider_consent: bool = False
+    driver_documents_confirmed: bool = False
 
     missed_visits_last_year: int = Field(default=0, ge=0)
-    consent_given: bool = True
-    story: str | None = None
 
     @field_validator("location", mode="before")
     @classmethod
@@ -221,14 +215,9 @@ class PatientUpdate(BaseModel):
     social_order_today: bool | None = None
     own_car: bool | None = None
     carpool_driver_seats: int | None = Field(default=None, ge=0, le=8)
-    carpool_consent: bool | None = None
-    driver_registration_valid: bool | None = None
-    driver_insurance_valid: bool | None = None
-    driver_license_valid: bool | None = None
-    volunteer_partner: str | None = None
+    carpool_rider_consent: bool | None = None
+    driver_documents_confirmed: bool | None = None
     missed_visits_last_year: int | None = Field(default=None, ge=0)
-    consent_given: bool | None = None
-    story: str | None = None
 
     @field_validator("location", mode="before")
     @classmethod
@@ -254,19 +243,11 @@ class PatientRead(PatientBase):
 
 
 class SlotBase(BaseModel):
-    facility_id: int | None = None
-    facility_key: str = Field(..., min_length=1, max_length=64)
-    facility_name: str | None = Field(default=None, max_length=200)
-    facility_location: GeoPoint | None = None
+    facility_id: int
     department: Department
     start_time: datetime
     end_time: datetime | None = None
     capacity: int = Field(default=1, ge=1)
-
-    @field_validator("facility_location", mode="before")
-    @classmethod
-    def _validate_facility_location(cls, v: Any) -> Any:
-        return _coerce_geopoint(v)
 
 
 class SlotCreate(SlotBase):
@@ -289,8 +270,7 @@ class SlotRead(SlotBase):
 class VisitRequestBase(BaseModel):
     patient_id: int
     referral_ref: str | None = Field(default=None, max_length=64)
-    facility_id: int | None = None
-    facility_key: str = Field(..., min_length=1, max_length=64)
+    facility_id: int
     department: Department
     visit_type: VisitType
     urgency_class: UrgencyClass
@@ -342,7 +322,6 @@ class VehicleBase(BaseModel):
     driver_name: str | None = Field(default=None, max_length=120)
     driver_phone: str | None = Field(default=None, max_length=40)
     patient_driver_id: int | None = None
-    has_driver_assistance: bool = True
     active: bool = True
 
     @field_validator("base_location", mode="before")
@@ -374,17 +353,15 @@ class AssignmentBase(BaseModel):
     slot_id: int
     vehicle_id: int
     return_vehicle_id: int | None = None
-    backup_vehicle_id: int | None = None
     pickup_time: datetime
     facility_arrival_time: datetime | None = None
     return_pickup_time: datetime | None = None
     home_dropoff_time: datetime | None = None
     pickup_order: int | None = Field(default=None, ge=0)
     return_order: int | None = Field(default=None, ge=0)
-    status: AssignmentStatus = Field(default=AssignmentStatus.PREDLOZENO)
+    status: AssignmentStatus = Field(default=AssignmentStatus.PROPOSED)
     is_locked: bool = False
-    carpool_confirmed: bool | None = None
-    distance_km: float | None = Field(default=None, ge=0.0)
+    carpool_driver_confirmed: bool | None = None
 
 
 class AssignmentCreate(AssignmentBase):
@@ -395,7 +372,6 @@ class AssignmentUpdate(BaseModel):
     slot_id: int | None = None
     vehicle_id: int | None = None
     return_vehicle_id: int | None = None
-    backup_vehicle_id: int | None = None
     pickup_time: datetime | None = None
     facility_arrival_time: datetime | None = None
     return_pickup_time: datetime | None = None
@@ -404,8 +380,7 @@ class AssignmentUpdate(BaseModel):
     return_order: int | None = Field(default=None, ge=0)
     status: AssignmentStatus | None = None
     is_locked: bool | None = None
-    carpool_confirmed: bool | None = None
-    distance_km: float | None = Field(default=None, ge=0.0)
+    carpool_driver_confirmed: bool | None = None
 
 
 class AssignmentRead(AssignmentBase):
@@ -439,7 +414,6 @@ class TripLogBase(BaseModel):
     elevator: bool | None = None
     companion: bool | None = None
     patient_age: int | None = Field(default=None, ge=0, le=120)
-    notes: str | None = None
 
 
 class TripLogCreate(TripLogBase):

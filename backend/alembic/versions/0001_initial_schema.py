@@ -119,16 +119,23 @@ def upgrade() -> None:
         sa.Column("social_order_today", sa.Boolean(), nullable=False),
         sa.Column("own_car", sa.Boolean(), nullable=False),
         sa.Column("carpool_driver_seats", sa.Integer(), nullable=False),
-        sa.Column("carpool_consent", sa.Boolean(), nullable=False),
-        sa.Column("driver_registration_valid", sa.Boolean(), nullable=False),
-        sa.Column("driver_insurance_valid", sa.Boolean(), nullable=False),
-        sa.Column("driver_license_valid", sa.Boolean(), nullable=False),
-        sa.Column("volunteer_partner", sa.String(length=120), nullable=True),
+        sa.Column("carpool_rider_consent", sa.Boolean(), nullable=False),
+        sa.Column("driver_documents_confirmed", sa.Boolean(), nullable=False),
         sa.Column("missed_visits_last_year", sa.Integer(), nullable=False),
-        sa.Column("consent_given", sa.Boolean(), nullable=False),
-        sa.Column("story", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "mobility_class IN ('walks', 'cane', 'wheelchair', 'stretcher')",
+            name="ck_patients_mobility_class",
+        ),
+        sa.CheckConstraint(
+            "transport_entitlement IN ('sanitetski', 'travel_order', 'none')",
+            name="ck_patients_transport_entitlement",
+        ),
+        sa.CheckConstraint(
+            "phone_type IN ('landline', 'basic_mobile', 'smartphone')",
+            name="ck_patients_phone_type",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_patients_key", "patients", ["key"], unique=True)
@@ -145,47 +152,24 @@ def upgrade() -> None:
     op.create_table(
         "slots",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("facility_id", sa.Integer(), nullable=True),
-        sa.Column("facility_key", sa.String(length=64), nullable=False),
-        sa.Column("facility_name", sa.String(length=200), nullable=True),
-        sa.Column(
-            "facility_location",
-            geoalchemy2.types.Geography(
-                geometry_type="POINT",
-                srid=4326,
-                from_text="ST_GeogFromText",
-                name="geography",
-                nullable=True,
-                spatial_index=False,
-            ),
-            nullable=True,
-        ),
+        sa.Column("facility_id", sa.Integer(), nullable=False),
         sa.Column("department", sa.String(length=64), nullable=False),
         sa.Column("start_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column("capacity", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["facility_id"], ["facilities.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["facility_id"], ["facilities.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_slots_facility_id", "slots", ["facility_id"], unique=False)
-    op.create_index("ix_slots_facility_key", "slots", ["facility_key"], unique=False)
     op.create_index("ix_slots_department", "slots", ["department"], unique=False)
     op.create_index("ix_slots_start_time", "slots", ["start_time"], unique=False)
-    op.create_index(
-        "idx_slots_facility_location",
-        "slots",
-        ["facility_location"],
-        unique=False,
-        postgresql_using="gist",
-    )
 
     op.create_table(
         "visit_requests",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("patient_id", sa.Integer(), nullable=False),
         sa.Column("referral_ref", sa.String(length=64), nullable=True),
-        sa.Column("facility_id", sa.Integer(), nullable=True),
-        sa.Column("facility_key", sa.String(length=64), nullable=False),
+        sa.Column("facility_id", sa.Integer(), nullable=False),
         sa.Column("department", sa.String(length=64), nullable=False),
         sa.Column("visit_type", sa.String(length=64), nullable=False),
         sa.Column("urgency_class", sa.String(length=64), nullable=False),
@@ -196,7 +180,11 @@ def upgrade() -> None:
         sa.Column("slot_request_pending", sa.Boolean(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["facility_id"], ["facilities.id"], ondelete="SET NULL"),
+        sa.CheckConstraint(
+            "status IN ('open', 'scheduled', 'completed', 'cancelled')",
+            name="ck_visit_requests_status",
+        ),
+        sa.ForeignKeyConstraint(["facility_id"], ["facilities.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["patient_id"], ["patients.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -206,9 +194,6 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_visit_requests_facility_id", "visit_requests", ["facility_id"], unique=False
-    )
-    op.create_index(
-        "ix_visit_requests_facility_key", "visit_requests", ["facility_key"], unique=False
     )
     op.create_index("ix_visit_requests_department", "visit_requests", ["department"], unique=False)
     op.create_index(
@@ -256,8 +241,12 @@ def upgrade() -> None:
         sa.Column("driver_name", sa.String(length=120), nullable=True),
         sa.Column("driver_phone", sa.String(length=40), nullable=True),
         sa.Column("patient_driver_id", sa.Integer(), nullable=True),
-        sa.Column("has_driver_assistance", sa.Boolean(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.CheckConstraint(
+            "provider_type IN ('sanitetski', 'red_cross', 'municipal', 'volunteer', 'taxi', "
+            "'patient_driver')",
+            name="ck_vehicles_provider_type",
+        ),
         sa.ForeignKeyConstraint(["patient_driver_id"], ["patients.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -281,7 +270,6 @@ def upgrade() -> None:
         sa.Column("slot_id", sa.Integer(), nullable=False),
         sa.Column("vehicle_id", sa.Integer(), nullable=False),
         sa.Column("return_vehicle_id", sa.Integer(), nullable=True),
-        sa.Column("backup_vehicle_id", sa.Integer(), nullable=True),
         sa.Column("pickup_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("facility_arrival_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column("return_pickup_time", sa.DateTime(timezone=True), nullable=True),
@@ -290,11 +278,13 @@ def upgrade() -> None:
         sa.Column("return_order", sa.Integer(), nullable=True),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("is_locked", sa.Boolean(), nullable=False),
-        sa.Column("carpool_confirmed", sa.Boolean(), nullable=True),
-        sa.Column("distance_km", sa.Float(), nullable=True),
+        sa.Column("carpool_driver_confirmed", sa.Boolean(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["backup_vehicle_id"], ["vehicles.id"], ondelete="SET NULL"),
+        sa.CheckConstraint(
+            "status IN ('proposed', 'confirmed', 'modified', 'completed')",
+            name="ck_assignments_status",
+        ),
         sa.ForeignKeyConstraint(["request_id"], ["visit_requests.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["return_vehicle_id"], ["vehicles.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["slot_id"], ["slots.id"], ondelete="RESTRICT"),
@@ -325,8 +315,12 @@ def upgrade() -> None:
         sa.Column("elevator", sa.Boolean(), nullable=True),
         sa.Column("companion", sa.Boolean(), nullable=True),
         sa.Column("patient_age", sa.Integer(), nullable=True),
-        sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "driver_status_event IN ('arrived', 'boarded', 'dropped_off', 'patient_absent', "
+            "'running_late')",
+            name="ck_trip_logs_driver_status_event",
+        ),
         sa.ForeignKeyConstraint(["assignment_id"], ["assignments.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -355,16 +349,13 @@ def downgrade() -> None:
     op.drop_index("ix_visit_requests_latest_date", table_name="visit_requests")
     op.drop_index("ix_visit_requests_earliest_date", table_name="visit_requests")
     op.drop_index("ix_visit_requests_department", table_name="visit_requests")
-    op.drop_index("ix_visit_requests_facility_key", table_name="visit_requests")
     op.drop_index("ix_visit_requests_facility_id", table_name="visit_requests")
     op.drop_index("ix_visit_requests_referral_ref", table_name="visit_requests")
     op.drop_index("ix_visit_requests_patient_id", table_name="visit_requests")
     op.drop_table("visit_requests")
 
-    op.drop_index("idx_slots_facility_location", table_name="slots", postgresql_using="gist")
     op.drop_index("ix_slots_start_time", table_name="slots")
     op.drop_index("ix_slots_department", table_name="slots")
-    op.drop_index("ix_slots_facility_key", table_name="slots")
     op.drop_index("ix_slots_facility_id", table_name="slots")
     op.drop_table("slots")
 

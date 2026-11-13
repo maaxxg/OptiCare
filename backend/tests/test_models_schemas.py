@@ -7,17 +7,20 @@ from pathlib import Path
 import pytest
 from geoalchemy2 import Geography, WKBElement
 from pydantic import ValidationError
+from sqlalchemy import CheckConstraint
 
 from app.db import Base
 from app.models import (
     Assignment,
     AssignmentStatus,
     Department,
+    DriverStatusEvent,
     Facility,
     MobilityClass,
     Municipality,
     Patient,
     PhoneType,
+    RequestStatus,
     Slot,
     TransportEntitlement,
     TripLog,
@@ -67,7 +70,6 @@ def test_metadata_tables_and_postgis_columns() -> None:
     point_Targets = [
         ("patients", "location"),
         ("facilities", "location"),
-        ("slots", "facility_location"),
         ("vehicles", "base_location"),
     ]
     for table_name, col_name in point_Targets:
@@ -86,29 +88,86 @@ def test_metadata_tables_and_postgis_columns() -> None:
     assert muni_col.type.spatial_index is True
 
 
-def test_enums_support_croatian_and_english_aliases() -> None:
-    assert VehicleProviderType("sanitetski") == VehicleProviderType.SANITETSKI
-    assert VehicleProviderType("Crveni križ") == VehicleProviderType.CRVENI_KRIZ
-    assert VehicleProviderType("općinski") == VehicleProviderType.OPCINSKI
-    assert VehicleProviderType("volonter") == VehicleProviderType.VOLONTER
-    assert VehicleProviderType("taksi") == VehicleProviderType.TAKSI
-    assert VehicleProviderType("pacijent-vozač") == VehicleProviderType.PACIJENT_VOZAC
-    assert VehicleProviderType("patient_driver") == VehicleProviderType.PACIJENT_VOZAC
+def test_enums_use_exact_english_values_without_aliases() -> None:
+    assert [m.value for m in VehicleProviderType] == [
+        "sanitetski",
+        "red_cross",
+        "municipal",
+        "volunteer",
+        "taxi",
+        "patient_driver",
+    ]
+    assert [m.value for m in AssignmentStatus] == [
+        "proposed",
+        "confirmed",
+        "modified",
+        "completed",
+    ]
+    assert [m.value for m in DriverStatusEvent] == [
+        "arrived",
+        "boarded",
+        "dropped_off",
+        "patient_absent",
+        "running_late",
+    ]
+    for enum_cls, bad in (
+        (VehicleProviderType, "Crveni križ"),
+        (AssignmentStatus, "potvrđeno"),
+        (MobilityClass, "kolica"),
+        (TransportEntitlement, "putni nalog"),
+        (DriverStatusEvent, "stigao"),
+    ):
+        with pytest.raises(ValueError):
+            enum_cls(bad)
 
-    assert AssignmentStatus("predloženo") == AssignmentStatus.PREDLOZENO
-    assert AssignmentStatus("potvrđeno") == AssignmentStatus.POTVRDENO
-    assert AssignmentStatus("izmijenjeno") == AssignmentStatus.IZMIJENJENO
-    assert AssignmentStatus("obavljeno") == AssignmentStatus.OBAVLJENO
-    assert AssignmentStatus("confirmed") == AssignmentStatus.POTVRDENO
 
-    assert MobilityClass("hoda") == MobilityClass.WALKS
-    assert MobilityClass("štap") == MobilityClass.CANE
-    assert MobilityClass("kolica") == MobilityClass.WHEELCHAIR
-    assert MobilityClass("nosila") == MobilityClass.STRETCHER
+def test_check_constraints_mirror_enums() -> None:
+    expected = {
+        ("patients", "mobility_class"): MobilityClass,
+        ("patients", "transport_entitlement"): TransportEntitlement,
+        ("patients", "phone_type"): PhoneType,
+        ("vehicles", "provider_type"): VehicleProviderType,
+        ("assignments", "status"): AssignmentStatus,
+        ("visit_requests", "status"): RequestStatus,
+        ("trip_logs", "driver_status_event"): DriverStatusEvent,
+    }
+    for (table, col), enum_cls in expected.items():
+        checks = {
+            c.name: str(c.sqltext)
+            for c in Base.metadata.tables[table].constraints
+            if isinstance(c, CheckConstraint)
+        }
+        text = checks[f"ck_{table}_{col}"]
+        for member in enum_cls:
+            assert f"'{member.value}'" in text
 
-    assert TransportEntitlement("sanitetski prijevoz") == TransportEntitlement.SANITETSKI
-    assert TransportEntitlement("putni nalog") == TransportEntitlement.TRAVEL_ORDER
-    assert TransportEntitlement("ništa") == TransportEntitlement.NONE
+
+def test_removed_fields_are_absent_and_consent_is_split() -> None:
+    cols = {t: set(Base.metadata.tables[t].c.keys()) for t in Base.metadata.tables}
+    assert not cols["patients"] & {
+        "story",
+        "consent_given",
+        "volunteer_partner",
+        "carpool_consent",
+        "driver_registration_valid",
+        "driver_insurance_valid",
+        "driver_license_valid",
+    }
+    assert {"carpool_rider_consent", "driver_documents_confirmed"} <= cols["patients"]
+    assert "has_driver_assistance" not in cols["vehicles"]
+    assert not cols["assignments"] & {"backup_vehicle_id", "distance_km", "carpool_confirmed"}
+    assert "carpool_driver_confirmed" in cols["assignments"]
+    assert "notes" not in cols["trip_logs"]
+    for table in ("slots", "visit_requests"):
+        assert "facility_key" not in cols[table]
+        assert Base.metadata.tables[table].c["facility_id"].nullable is False
+    assert not cols["slots"] & {"facility_name", "facility_location"}
+
+
+def test_county_is_required() -> None:
+    kw = {k: v for k, v in _PATIENT_KW.items() if k != "county"}
+    with pytest.raises(ValidationError):
+        PatientCreate(mbo="000000004", **kw)
 
 
 def test_wkt_and_wkb_coordinate_extraction() -> None:
@@ -168,9 +227,9 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         social_order_today=False,
         own_car=False,
         carpool_driver_seats=0,
-        carpool_consent=False,
+        carpool_rider_consent=False,
+        driver_documents_confirmed=False,
         missed_visits_last_year=1,
-        consent_given=True,
         created_at=now,
         updated_at=now,
     )
@@ -188,9 +247,7 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
     slot = Slot(
         id=100,
         facility_id=1,
-        facility_key="ob_gospic",
-        facility_name="Opća bolnica Gospić",
-        facility_location=make_point_wkt(44.5469, 15.3747),
+        facility=facility,
         department=Department.CARDIOLOGY.value,
         start_time=now,
         capacity=1,
@@ -204,12 +261,12 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         patient_id=patient.id,
         referral_ref="EUP-2026-0001",
         facility_id=1,
-        facility_key="ob_gospic",
         department=Department.CARDIOLOGY.value,
         visit_type=VisitType.FOLLOW_UP.value,
         urgency_class=UrgencyClass.WITHIN_MONTH.value,
         earliest_date=date(2026, 11, 15),
         latest_date=date(2026, 11, 24),
+        slot_request_pending=False,
         status="open",
         candidate_slots=[slot],
         created_at=now,
@@ -221,7 +278,7 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
     veh_in = VehicleCreate(
         key="ck_gospic_1",
         name="Crveni križ Gospić 1",
-        provider_type="Crveni križ",  # type: ignore[arg-type]
+        provider_type="red_cross",  # type: ignore[arg-type]
         seats=4,
         wheelchair_spots=1,
         shift_start=time(7, 0),
@@ -230,7 +287,7 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         base_municipality="Gospić",
         base_location=GeoPoint(lat=44.5469, lon=15.3747),
     )
-    assert veh_in.provider_type == VehicleProviderType.CRVENI_KRIZ
+    assert veh_in.provider_type == VehicleProviderType.RED_CROSS
 
     vehicle = Vehicle(
         id=300,
@@ -245,11 +302,10 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         base_settlement=veh_in.base_settlement,
         base_municipality=veh_in.base_municipality,
         base_location=make_point_wkt(veh_in.base_location.lat, veh_in.base_location.lon),
-        has_driver_assistance=True,
         active=True,
     )
     veh_read = VehicleRead.model_validate(vehicle)
-    assert veh_read.provider_type == VehicleProviderType.CRVENI_KRIZ
+    assert veh_read.provider_type == VehicleProviderType.RED_CROSS
     assert veh_read.latitude == pytest.approx(44.5469)
 
     asgn_in = AssignmentCreate(
@@ -257,10 +313,10 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         slot_id=100,
         vehicle_id=300,
         pickup_time=now,
-        status="potvrđeno",  # type: ignore[arg-type]
+        status="confirmed",  # type: ignore[arg-type]
         is_locked=True,
     )
-    assert asgn_in.status == AssignmentStatus.POTVRDENO
+    assert asgn_in.status == AssignmentStatus.CONFIRMED
     assert asgn_in.is_locked is True
 
     asgn = Assignment(
@@ -275,16 +331,16 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
         updated_at=now,
     )
     asgn_read = AssignmentRead.model_validate(asgn)
-    assert asgn_read.status == AssignmentStatus.POTVRDENO
+    assert asgn_read.status == AssignmentStatus.CONFIRMED
     assert asgn_read.is_locked is True
 
-    patch = AssignmentUpdate(status="izmijenjeno", is_locked=True)  # type: ignore[arg-type]
-    assert patch.status == AssignmentStatus.IZMIJENJENO
+    patch = AssignmentUpdate(status="modified", is_locked=True)  # type: ignore[arg-type]
+    assert patch.status == AssignmentStatus.MODIFIED
 
     log_in = TripLogCreate(
         assignment_id=400,
         actual_arrival_at_door=now,
-        driver_status_event="stigao",  # type: ignore[arg-type]
+        driver_status_event="arrived",  # type: ignore[arg-type]
         recorded_by="driver",
     )
     log_orm = TripLog(
@@ -302,6 +358,7 @@ def test_orm_models_and_pydantic_roundtrip() -> None:
 
     muni_in = MunicipalityCreate(
         name="Gospić",
+        county="Ličko-senjska",
         boundary_wkt="POLYGON((15.0 44.0, 15.5 44.0, 15.5 44.6, 15.0 44.6, 15.0 44.0))",
     )
     muni_orm = Municipality(
@@ -322,12 +379,13 @@ def test_schema_validation_errors() -> None:
             phone="+385 00 000 0001",
             settlement="Gospić",
             municipality="Gospić",
+            county="Ličko-senjska",
         )
 
     with pytest.raises(ValidationError, match="Najkasniji datum ne smije biti prije najranijeg"):
         VisitRequestCreate(
             patient_id=1,
-            facility_key="ob_gospic",
+            facility_id=1,
             department=Department.CARDIOLOGY,
             visit_type=VisitType.FOLLOW_UP,
             urgency_class=UrgencyClass.WITHIN_WEEK,
@@ -342,6 +400,7 @@ _PATIENT_KW = dict(
     phone="+385 00 000 0001",
     settlement="Gospić",
     municipality="Gospić",
+    county="Ličko-senjska",
 )
 
 
