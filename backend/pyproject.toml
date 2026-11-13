@@ -4,10 +4,12 @@ version = "0.1.0"
 description = "OptiCare backend: intake, scoring, planner, notifications"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.14",
     "fastapi>=0.115",
     "geoalchemy2>=0.21.0",
     "psycopg[binary]>=3.3.9",
     "pydantic-settings>=2.16.3",
+    "pyyaml>=6.0",
     "sqlalchemy>=2",
     "uvicorn[standard]>=0.32",
 ]

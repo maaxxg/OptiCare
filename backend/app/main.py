@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.codebooks import Codebooks, get_codebooks
 from app.config import get_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -57,3 +58,9 @@ app = FastAPI(title="OptiCare", lifespan=lifespan)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/codebooks", response_model=Codebooks)
+def read_codebooks() -> Codebooks:
+    return get_codebooks()
+
