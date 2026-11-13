@@ -7,6 +7,7 @@ dependencies = [
     "alembic>=1.14",
     "fastapi>=0.115",
     "geoalchemy2>=0.21.0",
+    "httpx>=0.27",
     "psycopg[binary]>=3.3.9",
     "pydantic-settings>=2.16.3",
     "pyyaml>=6.0",
@@ -16,10 +17,22 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=8",
-    "httpx>=0.27",
+    "ruff>=0.17.5",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
