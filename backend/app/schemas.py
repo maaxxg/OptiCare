@@ -197,7 +197,7 @@ class PatientCreate(PatientBase):
     def _validate_mbo(cls, v: str) -> str:
         cleaned = v.strip()
         if not _MBO_RE.match(cleaned):
-            raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki")
+            raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
         return cleaned
 
 
