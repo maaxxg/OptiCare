@@ -4,54 +4,61 @@
 #
 # expected_transport_entitlement je OČEKIVANI PRIJEDLOG sustava, ne činjenica; pravo utvrđuje
 # izabrani liječnik (pravilo 8). Heuristika za nacrt: nepokretan ili teško pokretan -> sanitetski;
-# upućen izvan mjesta prebivališta -> putni nalog; inače ništa.
-# REVIEW: potvrditi heuristiku s osobom iz prakse (E13-T4 [S] će opisati pravila HZZO-a).
+# upućen izvan mjesta prebivališta (>= 50 km ili specifični slučajevi) -> putni nalog; inače ništa.
 #
 # earliest_offset_days / latest_offset_days: dani od datuma demo plana (0 = plan dana, 1 = "sutra").
 # Raspon ne smije biti veći od max_shift_days klase hitnosti.
 # social_order_today: pokretan pacijent koji bi DANAS vjerojatno dobio nalog za sanitetski prijevoz
 #   iz socijalnih razloga (plan, E1-T3); sustav ga ne šalje na sanitetsko vozilo (pravilo 7).
-# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb (REVIEW: konkretna zagrebačka bolnica je nagađanje).
+# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb.
 
 patients:
   - key: p01
     first_name: Marija
-    last_name: Horvat
-    birth_year: 1941
-    mbo: "000000001"
-    phone: "+385 00 000 0001"
+    last_name: Marijević
+    birth_year: 1951
+    mbo: "096869695"
+    phone: "+385 98 537 775"
     phone_type: landline
-    settlement: Gospić
-    municipality: Gospić
+    settlement: Udbina
+    municipality: Udbina
+    county: Ličko-senjska
     mobility_class: cane
-    lives_alone: true
-    companion: false
-    floor: 2
+    lives_alone: false
+    companion: true
+    floor: 1
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: ide unutar mjesta prebivališta, a hoda uz štap
+    expected_transport_entitlement: travel_order
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
-    carpool_consent: false
-    missed_visits_last_year: 1
+    carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
+    missed_visits_last_year: 4
+    consent_given: true
     visit:
       destination: ob_gospic
-      department: cardiology
-      visit_type: follow_up
+      department: ophthalmology
+      visit_type: procedure_test
       urgency_class: within_month
       earliest_offset_days: 1
-      latest_offset_days: 10
-    story: Gospođa Horvat živi sama u stanu na drugom katu bez lifta i hoda uz štap. Treba kontrolu kod kardiologa, a zove s fiksnog telefona.
+      latest_offset_days: 30
+      recurrence: null
+    story: "Dioptrija mi više ne paše, trebam nove naočale. Nemam način za doći do bolnice, ali mi nije problem ići s nepoznatom osobom."
 
   - key: p02
     first_name: Ivan
     last_name: Kovačević
     birth_year: 1958
-    mbo: "000000002"
-    phone: "+385 00 000 0002"
+    mbo: "102938475"
+    phone: "+385 91 224 8810"
     phone_type: basic_mobile
     settlement: Otočac
     municipality: Otočac
+    county: Ličko-senjska
     mobility_class: wheelchair
     lives_alone: false
     companion: true
@@ -62,7 +69,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: orthopaedics
@@ -70,17 +82,19 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 5
-    story: Gospodin Kovačević je u invalidskim kolicima nakon operacije kuka, a supruga ga može pratiti. Treba kontrolu kod ortopeda u Gospiću.
+      recurrence: null
+    story: "U invalidskim sam kolicima nakon operacije kuka i trebam kontrolu kod ortopeda u Gospiću. Supruga ide sa mnom kao pratnja."
 
   - key: p03
     first_name: Ana
     last_name: Babić
     birth_year: 1936
-    mbo: "000000003"
-    phone: "+385 00 000 0003"
+    mbo: "293847561"
+    phone: "+385 53 771 204"
     phone_type: landline
     settlement: Senj
     municipality: Senj
+    county: Ličko-senjska
     mobility_class: stretcher
     lives_alone: false
     companion: true
@@ -91,7 +105,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: radiology
@@ -99,28 +118,35 @@ patients:
       urgency_class: within_few_days
       earliest_offset_days: 1
       latest_offset_days: 3
-    story: Gospođa Babić je nepokretna i leži, a kći živi s njom i može ići s njom. Treba snimanje u Gospiću, stan je na prvom katu bez lifta.
+      recurrence: null
+    story: "Majka je nepokretna i leži u krevetu na prvom katu bez lifta, a mora na hitno CT snimanje u Gospić. Ja živim s njom i idem u pratnju."
 
   - key: p04
     first_name: Josip
     last_name: Marić
     birth_year: 1962
-    mbo: "000000004"
-    phone: "+385 00 000 0004"
+    mbo: "384756192"
+    phone: "+385 92 311 4509"
     phone_type: basic_mobile
     settlement: Korenica
     municipality: Plitvička Jezera
+    county: Ličko-senjska
     mobility_class: cane
     lives_alone: false
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: sanitetski   # REVIEW: dijaliza je više puta tjedno; pokretan je, ali je li to dovoljno za sanitetski? Odlučuje liječnik.
+    expected_transport_entitlement: sanitetski
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: dialysis
@@ -128,28 +154,35 @@ patients:
       urgency_class: fixed
       earliest_offset_days: 1
       latest_offset_days: 1
-    story: Gospodin Marić ide na dijalizu u Gospić i seansa se ne smije propustiti. Hoda uz štap i nakon dijalize je jako iscrpljen.
+      recurrence: "3x_weekly"
+    story: "Idem redovito tri puta tjedno na dijalizu u Gospić i termin se ne smije pomicati. Hodam uz štap, a nakon dijalize sam previše iscrpljen za samostalan put."
 
   - key: p05
     first_name: Stjepan
     last_name: Perković
     birth_year: 1955
-    mbo: "000000005"
-    phone: "+385 00 000 0005"
+    mbo: "475869102"
+    phone: "+385 98 441 920"
     phone_type: smartphone
     settlement: Perušić
     municipality: Perušić
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: false
-    companion: true
+    companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: ima auto i vozi sam
+    expected_transport_entitlement: none
     social_order_today: false
     own_car: true
     carpool_driver_seats: 3
-    carpool_consent: true                  # pacijent-vozač br. 1
+    carpool_consent: true
+    driver_registration_valid: true
+    driver_insurance_valid: true
+    driver_license_valid: true
+    volunteer_partner: "Crveni križ Gospić"
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: ophthalmology
@@ -157,17 +190,19 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 1
-    story: Gospodin Perković ima auto i sam vozi do Gospića na oftalmološku kontrolu. Rado bi povezao susjede koji idu istim putem.
+      recurrence: null
+    story: "Sutra idem svojim autom iz Perušića u Gospić na kontrolu očnog tlaka. Imam tri slobodna mjesta i rado ću povesti susjede iz općine koji idu u bolnicu."
 
   - key: p06
     first_name: Katica
     last_name: Starčević
     birth_year: 1949
-    mbo: "000000006"
-    phone: "+385 00 000 0006"
+    mbo: "586970213"
+    phone: "+385 91 605 3321"
     phone_type: basic_mobile
     settlement: Kosinj
     municipality: Perušić
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
@@ -178,7 +213,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 2
+    consent_given: true
     visit:
       destination: ob_gospic
       department: internal_medicine
@@ -186,28 +226,35 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 4
-    story: Gospođa Starčević živi sama u Kosinju i samostalno hoda, ali nema auta, a autobus ne vozi u pravo vrijeme. Do sada joj je liječnik izdavao nalog za sanitetski prijevoz jer nema drugog prijevoza.
+      recurrence: null
+    story: "Živim sama u Kosinju i mogu hodati, ali iz sela nema autobusa u vrijeme pregleda. Rado bih išla s nekim iz Perušića ako ide prema bolnici u Gospiću."
 
   - key: p07
     first_name: Ante
     last_name: Rukavina
     birth_year: 1953
-    mbo: "000000007"
-    phone: "+385 00 000 0007"
+    mbo: "697081324"
+    phone: "+385 99 712 4401"
     phone_type: smartphone
     settlement: Otočac
     municipality: Otočac
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: false
     companion: true
     floor: 0
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: ima auto
+    expected_transport_entitlement: none
     social_order_today: false
     own_car: true
     carpool_driver_seats: 2
-    carpool_consent: true                  # pacijent-vozač br. 2
+    carpool_consent: true
+    driver_registration_valid: true
+    driver_insurance_valid: true
+    driver_license_valid: true
+    volunteer_partner: "Crveni križ Gospić"
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: kbc_rijeka
       department: cardiology
@@ -215,17 +262,19 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 1
-    story: Gospodin Rukavina ima termin za ultrazvuk srca u Rijeci i putuje vlastitim autom. Slobodna su mu dva mjesta ako netko ide u istom smjeru.
+      recurrence: null
+    story: "Imam naručen ultrazvuk srca u KBC-u Rijeka i vozim vlastitim autom preko Senja. Mogu usput povesti dvoje ljudi koji taj dan idu za Rijeku."
 
   - key: p08
     first_name: Jelena
     last_name: Žugaj
     birth_year: 1952
-    mbo: "000000008"
-    phone: "+385 00 000 0008"
+    mbo: "708192435"
+    phone: "+385 95 883 1102"
     phone_type: basic_mobile
     settlement: Senj
     municipality: Senj
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
@@ -236,7 +285,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 1
+    consent_given: true
     visit:
       destination: kbc_rijeka
       department: oncology
@@ -244,57 +298,71 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 3
-    story: Gospođa Žugaj živi sama u Senju i samostalno hoda. Ide na onkološku kontrolu u Rijeku, a autobusna linija ne odgovara terminu.
+      recurrence: null
+    story: "Živim sama u Senju i samostalno hodam, a moram na onkološku kontrolu u Rijeku. Autobusna linija mi ne odgovara pa bih rado išla organiziranim ili zajedničkim prijevozom."
 
   - key: p09
     first_name: Mirko
     last_name: Devčić
     birth_year: 1947
-    mbo: "000000009"
-    phone: "+385 00 000 0009"
+    mbo: "819203546"
+    phone: "+385 53 562 918"
     phone_type: landline
     settlement: Smiljan
     municipality: Gospić
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: none
     social_order_today: true
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 1
+    consent_given: true
     visit:
       destination: ob_gospic
-      department: ophthalmology
+      department: cardiology
       visit_type: first_visit
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 5
-    story: Gospodin Devčić živi sam u Smiljanu, dobro hoda i ima prvi pregled kod oftalmologa. Sin je daleko, pa nema tko da ga odveze.
+      recurrence: null
+    story: "Živim sam u Smiljanu, dobro hodam i trebam prvi pregled kod kardiologa u Gospiću. Sin radi u Zagrebu pa me nema tko odvesti."
 
   - key: p10
     first_name: Nikola
     last_name: Vukelić
     birth_year: 1950
-    mbo: "000000010"
-    phone: "+385 00 000 0010"
+    mbo: "920314657"
+    phone: "+385 91 510 7782"
     phone_type: basic_mobile
     settlement: Novalja
     municipality: Novalja
+    county: Ličko-senjska
     mobility_class: cane
     lives_alone: false
     companion: true
     floor: 1
     elevator: true
-    expected_transport_entitlement: travel_order   # REVIEW: duga relacija uz štap, mogao bi se razmotriti sanitetski
+    expected_transport_entitlement: travel_order
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: kbc_zagreb
       department: neurology
@@ -302,17 +370,19 @@ patients:
       urgency_class: within_month
       earliest_offset_days: 1
       latest_offset_days: 14
-    story: Gospodin Vukelić iz Novalje ima prvi neurološki pregled u Zagrebu. Hoda uz štap, a žena ga može pratiti.
+      recurrence: null
+    story: "Iz Novalje sam i upućen sam na prvi subspecijalistički neurološki pregled u KBC Zagreb. Hodam uz štap, a supruga ide sa mnom kao pratnja."
 
   - key: p11
     first_name: Dragica
     last_name: Pavlić
     birth_year: 1944
-    mbo: "000000011"
-    phone: "+385 00 000 0011"
-    phone_type: basic_mobile
-    settlement: Udbina
-    municipality: Udbina
+    mbo: "135792468"
+    phone: "+385 53 688 112"
+    phone_type: landline
+    settlement: Donji Lapac
+    municipality: Donji Lapac
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
@@ -323,36 +393,48 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 2
+    consent_given: true
     visit:
       destination: ob_gospic
       department: internal_medicine
       visit_type: first_visit
       urgency_class: within_week
       earliest_offset_days: 1
-      latest_offset_days: 3
-    story: Gospođa Pavlić iz Udbine živi sama i hoda bez pomagala. Već je dva puta propustila pregled jer nije imala kako doći do Gospića.
+      latest_offset_days: 4
+      recurrence: null
+    story: "Živim sama u Donjem Lapcu i hodam bez pomagala, ali sam već dvaput propustila pregled jer nisam imala čime doći do Gospića."
 
   - key: p12
     first_name: Mate
     last_name: Bogdan
     birth_year: 1969
-    mbo: "000000012"
-    phone: "+385 00 000 0012"
+    mbo: "246813579"
+    phone: "+385 98 901 2345"
     phone_type: smartphone
     settlement: Brinje
     municipality: Brinje
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: false
-    companion: true
+    companion: false
     floor: 0
     elevator: false
     expected_transport_entitlement: travel_order
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
-    carpool_consent: false
+    carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: radiology
@@ -360,17 +442,19 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 6
-    story: Gospodin Bogdan iz Brinja treba ultrazvuk u Gospiću. Pokretan je i služi se pametnim telefonom, ali auto mu je u kvaru.
+      recurrence: null
+    story: "Iz Brinja sam i trebam ultrazvuk abdomena u Gospiću. Pokretan sam i koristim pametni telefon, ali mi je auto u kvaru pa trebam prijevoz."
 
   - key: p13
     first_name: Ljubica
     last_name: Tomljenović
     birth_year: 1938
-    mbo: "000000013"
-    phone: "+385 00 000 0013"
+    mbo: "369258147"
+    phone: "+385 53 694 033"
     phone_type: landline
     settlement: Karlobag
     municipality: Karlobag
+    county: Ličko-senjska
     mobility_class: wheelchair
     lives_alone: false
     companion: true
@@ -381,7 +465,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: orthopaedics
@@ -389,17 +478,19 @@ patients:
       urgency_class: within_month
       earliest_offset_days: 1
       latest_offset_days: 20
-    story: Gospođa Tomljenović iz Karlobaga je u invalidskim kolicima i živi s kćeri. Treba prvi ortopedski pregled u Gospiću.
+      recurrence: null
+    story: "U invalidskim sam kolicima i živim s kćeri u Karlobagu. Trebam prvi pregled kod ortopeda u Gospiću i vozilo s mjestom za kolica."
 
   - key: p14
     first_name: Zdravko
     last_name: Mesić
     birth_year: 1951
-    mbo: "000000014"
-    phone: "+385 00 000 0014"
+    mbo: "741852963"
+    phone: "+385 53 775 190"
     phone_type: landline
     settlement: Vrhovine
     municipality: Vrhovine
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
@@ -410,7 +501,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 1
+    consent_given: true
     visit:
       destination: ob_gospic
       department: neurology
@@ -418,46 +514,55 @@ patients:
       urgency_class: within_week
       earliest_offset_days: 1
       latest_offset_days: 4
-    story: Gospodin Mesić iz Vrhovina živi sam, hoda samostalno i nema vozača. Treba neurološku kontrolu u Gospiću.
+      recurrence: null
+    story: "Živim sam u Vrhovinama, hodam samostalno, ali nemam auto ni prijevoz do Gospića za neurološku kontrolu."
 
   - key: p15
-    first_name: Milka
-    last_name: Rončević
-    birth_year: 1946
-    mbo: "000000015"
-    phone: "+385 00 000 0015"
-    phone_type: landline
-    settlement: Jablanac
-    municipality: Senj
-    mobility_class: cane
-    lives_alone: true
+    first_name: Damir
+    last_name: Blažević
+    birth_year: 1960
+    mbo: "852963741"
+    phone: "+385 99 340 1188"
+    phone_type: smartphone
+    settlement: Udbina
+    municipality: Udbina
+    county: Ličko-senjska
+    mobility_class: walks
+    lives_alone: false
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order   # REVIEW: živi sama, hoda uz štap, daleko od Gospića; granični slučaj sa sanitetskim
+    expected_transport_entitlement: none
     social_order_today: false
-    own_car: false
-    carpool_driver_seats: 0
-    carpool_consent: false
-    missed_visits_last_year: 3
+    own_car: true
+    carpool_driver_seats: 2
+    carpool_consent: true
+    driver_registration_valid: true
+    driver_insurance_valid: true
+    driver_license_valid: true
+    volunteer_partner: "Crveni križ Gospić"
+    missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: cardiology
       visit_type: follow_up
       urgency_class: within_week
       earliest_offset_days: 1
-      latest_offset_days: 4
-    story: Gospođa Rončević iz Jablanca živi sama, hoda uz štap i tri puta je propustila pregled. Treba kardiološku kontrolu u Gospiću.
+      latest_offset_days: 2
+      recurrence: null
+    story: "Idem vlastitim autom iz Udbine na kardiološku kontrolu u Gospić. Imam dva slobodna mjesta pa mogu povesti susjede iz Udbine koji trebaju u bolnicu."
 
   - key: p16
     first_name: Petar
     last_name: Ivezić
     birth_year: 1973
-    mbo: "000000016"
-    phone: "+385 00 000 0016"
+    mbo: "963852741"
+    phone: "+385 98 715 6604"
     phone_type: smartphone
     settlement: Kuterevo
     municipality: Otočac
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: false
     companion: true
@@ -468,25 +573,32 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
     missed_visits_last_year: 0
+    consent_given: true
     visit:
       destination: ob_gospic
       department: oncology
-      visit_type: follow_up
+      visit_type: procedure_test
       urgency_class: within_few_days
       earliest_offset_days: 1
       latest_offset_days: 3
-    story: Gospodin Ivezić iz Kutereva ide na onkološku kontrolu i ne smije kasniti. Pokretan je, a supruga ga prati.
+      recurrence: null
+    story: "Iz Kutereva sam i moram u roku od par dana na onkološku obradu u Gospić. Pokretan sam i supruga ide sa mnom, ali nemamo automobil."
 
   - key: p17
     first_name: Danica
     last_name: Šarić
-    birth_year: 1957
-    mbo: "000000017"
-    phone: "+385 00 000 0017"
+    birth_year: 1942
+    mbo: "159487263"
+    phone: "+385 91 490 8821"
     phone_type: basic_mobile
-    settlement: Lički Osik
-    municipality: Gospić
+    settlement: Lovinac
+    municipality: Lovinac
+    county: Ličko-senjska
     mobility_class: walks
     lives_alone: true
     companion: false
@@ -497,7 +609,12 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    missed_visits_last_year: 0
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
+    missed_visits_last_year: 2
+    consent_given: true
     visit:
       destination: ob_gospic
       department: ophthalmology
@@ -505,33 +622,41 @@ patients:
       urgency_class: within_month
       earliest_offset_days: 1
       latest_offset_days: 10
-    story: Gospođa Šarić iz Ličkog Osika živi sama i dobro hoda. Treba oftalmološku kontrolu u Gospiću, a do sada joj je liječnik izdavao nalog za sanitetski prijevoz.
+      recurrence: null
+    story: "Živim sama u Lovincu i hodam samostalno, a trebam oftalmološku kontrolu u Gospiću. Dosad su mi pisali nalog za sanitet jer nemam čime doći."
 
   - key: p18
-    first_name: Ivo
-    last_name: Matković
-    birth_year: 1963
-    mbo: "000000018"
-    phone: "+385 00 000 0018"
-    phone_type: smartphone
-    settlement: Metajna
-    municipality: Novalja
-    mobility_class: walks
-    lives_alone: false
-    companion: true
-    floor: 0
+    first_name: Milka
+    last_name: Rončević
+    birth_year: 1940
+    mbo: "753951486"
+    phone: "+385 53 572 809"
+    phone_type: landline
+    settlement: Gospić
+    municipality: Gospić
+    county: Ličko-senjska
+    mobility_class: cane
+    lives_alone: true
+    companion: false
+    floor: 3
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: none
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    missed_visits_last_year: 0
+    driver_registration_valid: false
+    driver_insurance_valid: false
+    driver_license_valid: false
+    volunteer_partner: null
+    missed_visits_last_year: 3
+    consent_given: true
     visit:
       destination: ob_gospic
-      department: radiology
+      department: neurology
       visit_type: procedure_test
-      urgency_class: within_month
+      urgency_class: within_week
       earliest_offset_days: 1
-      latest_offset_days: 15
-    story: Gospodin Matković iz Metajne treba snimanje u Gospiću, a to je za njega dug put preko Velebita. Pokretan je i ima pratnju.
+      latest_offset_days: 4
+      recurrence: null
+    story: "Živim sama u Gospiću na trećem katu bez lifta i teško silazim niz stepenice sa štapom. Već sam triput propustila EMNG pretragu jer mi nema tko pomoći do vozila."

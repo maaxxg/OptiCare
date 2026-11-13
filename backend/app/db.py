@@ -20,6 +20,11 @@ class Base(DeclarativeBase):
                 if getattr(self, attr_name, None) is None and col.default is not None:
                     if getattr(col.default, "is_scalar", False):
                         setattr(self, attr_name, col.default.arg)
+                    elif getattr(col.default, "is_callable", False):
+                        try:
+                            setattr(self, attr_name, col.default.arg(None))
+                        except TypeError:
+                            setattr(self, attr_name, col.default.arg())
 
 
 

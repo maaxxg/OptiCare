@@ -141,6 +141,7 @@ class VehicleProviderType(StrEnum):
     VOLONTER = "volonter"
     TAKSI = "taksi"
     PACIJENT_VOZAC = "pacijent_vozac"
+    JAVNI_PRIJEVOZ = "javni_prijevoz"
 
     @classmethod
     def _missing_(cls, value: object) -> VehicleProviderType | None:
@@ -155,6 +156,9 @@ class VehicleProviderType(StrEnum):
             "volunteer": cls.VOLONTER,
             "taxi": cls.TAKSI,
             "patient_driver": cls.PACIJENT_VOZAC,
+            "public_transit": cls.JAVNI_PRIJEVOZ,
+            "lika_line": cls.JAVNI_PRIJEVOZ,
+            "autobus": cls.JAVNI_PRIJEVOZ,
         }
         for member in cls:
             if member.value == norm:
