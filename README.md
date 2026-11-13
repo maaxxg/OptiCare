@@ -67,6 +67,10 @@ Nakon izmjene ponovno pokreni backend. Za demo koristi samo sintetičke podatke 
 ## Provjere
 
 ```sh
-cd backend && uv run pytest
-cd frontend && npm run check
+cd backend && uv run python check.py   # ruff, format check, mypy, pytest
+cd frontend && npm run check:all       # prettier, eslint, svelte-check
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) pokreće obje provjere na svaki push na `main` i na svaki pull request; backend testovi tada rade nad PostGIS servisom.
+
+Test baze (`backend/tests/test_db_postgis.py`) je opcionalan i lokalno se preskače. Za pokretanje: `docker compose up db`, zatim `cd backend && RUN_DB_TESTS=1 uv run pytest tests/test_db_postgis.py` (PowerShell: `$env:RUN_DB_TESTS=1; uv run pytest tests/test_db_postgis.py`).
