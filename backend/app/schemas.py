@@ -156,6 +156,15 @@ def _clean_mbo(v: str) -> str:
     return cleaned
 
 
+def _scrub_mbo(value: Any) -> Any:
+    """Copy of an error input with every `mbo` key masked (`missing` errors carry the body)."""
+    if isinstance(value, dict):
+        return {k: "***" if k == "mbo" else _scrub_mbo(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_mbo(v) for v in value]
+    return value
+
+
 def _mask_mbo_errors(title: str, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
     # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
     # 422 bodies) still carries the input. Rebuild the error without the MBO value.
@@ -173,7 +182,7 @@ def _mask_mbo_errors(title: str, data: Any, handler: ModelWrapValidatorHandler[A
             line: InitErrorDetails = {
                 "type": kind,
                 "loc": err["loc"],
-                "input": "***" if is_mbo else err["input"],
+                "input": "***" if is_mbo else _scrub_mbo(err["input"]),
             }
             if "ctx" in err and not is_mbo:
                 line["ctx"] = err["ctx"]

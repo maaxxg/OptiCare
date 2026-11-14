@@ -2,16 +2,17 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
+from enum import Enum
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from sqlalchemy import Connection, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.adapters import get_geocoding_client, get_llm_client
-from app.adapters.geocoding import GeocodingClient
+from app.adapters.geocoding import GeocodingClient, _normalize
 from app.adapters.llm import LLMClient
 from app.codebooks import Codebooks, get_codebooks, get_urgency_max_shift_days
 from app.config import get_settings
@@ -44,6 +45,10 @@ ZAGREB_TZ = ZoneInfo("Europe/Zagreb")
 DbSession = Annotated[Session, Depends(get_db)]
 LlmDep = Annotated[LLMClient, Depends(get_llm_client)]
 GeoDep = Annotated[GeocodingClient, Depends(get_geocoding_client)]
+
+
+def _name_key(name: str) -> str:
+    return _normalize(name).strip()
 
 
 class StartupCheckError(RuntimeError):
@@ -151,12 +156,41 @@ def lookup_patient(payload: PatientLookup, db: DbSession) -> list[Patient]:
     return list(db.scalars(select(Patient).where(Patient.mbo == payload.mbo)).all())
 
 
-@app.post("/patients", response_model=PatientRead, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/patients",
+    response_model=PatientRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        200: {"description": "Existing patient (same MBO) updated; only sent fields change."},
+        409: {"description": "MBO belongs to a patient with a different name; nothing changed."},
+    },
+)
 def create_or_update_patient(
     payload: PatientCreate,
+    response: Response,
     db: DbSession,
     geocoding_client: GeoDep,
 ) -> Patient:
+    """Create a patient (201) or update the one with the same MBO (200).
+
+    On update only the fields present in the request body change. If the MBO belongs to a
+    patient with a different name, nothing is written and 409 is returned.
+    """
+    existing = db.scalars(select(Patient).where(Patient.mbo == payload.mbo)).first()
+    if existing is not None and (
+        _name_key(existing.first_name) != _name_key(payload.first_name)
+        or _name_key(existing.last_name) != _name_key(payload.last_name)
+    ):
+        # Neither the MBO nor the stored name may appear in the message.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                "Pacijent s ovim MBO-om već postoji pod drugim imenom. "
+                "Provjerite MBO i ime pacijenta."
+            ),
+        )
+
+    sent = payload.model_fields_set
     geo_point = payload.location
     settlement = payload.settlement
     municipality = payload.municipality
@@ -175,35 +209,20 @@ def create_or_update_patient(
 
     location_wkt = make_point_wkt(geo_point.lat, geo_point.lon) if geo_point is not None else None
 
-    existing = db.scalars(select(Patient).where(Patient.mbo == payload.mbo)).first()
     if existing is not None:
-        if payload.key is not None:
-            existing.key = payload.key
-        existing.first_name = payload.first_name
-        existing.last_name = payload.last_name
-        existing.birth_year = payload.birth_year
-        existing.phone = payload.phone
-        existing.phone_type = payload.phone_type.value
-        existing.address = payload.address
+        for field in sent - {"mbo", "location", "settlement", "municipality", "county"}:
+            value = getattr(payload, field)
+            setattr(existing, field, value.value if isinstance(value, Enum) else value)
+        # Location group: required in the schema, so the client always sent these three;
+        # geocoding (when it succeeded) refined them, otherwise the client's values stand.
         existing.settlement = settlement
         existing.municipality = municipality
         existing.county = county
         if location_wkt is not None:
             existing.location = location_wkt
-        existing.mobility_class = payload.mobility_class.value
-        existing.lives_alone = payload.lives_alone
-        existing.companion = payload.companion
-        existing.floor = payload.floor
-        existing.elevator = payload.elevator
-        existing.transport_entitlement = payload.transport_entitlement.value
-        existing.social_order_today = payload.social_order_today
-        existing.own_car = payload.own_car
-        existing.carpool_driver_seats = payload.carpool_driver_seats
-        existing.carpool_rider_consent = payload.carpool_rider_consent
-        existing.driver_documents_confirmed = payload.driver_documents_confirmed
-        existing.missed_visits_last_year = payload.missed_visits_last_year
         db.commit()
         db.refresh(existing)
+        response.status_code = status.HTTP_200_OK
         return existing
 
     patient = Patient(
