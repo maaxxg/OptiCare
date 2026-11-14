@@ -5,6 +5,8 @@
 		updateDriverStopStatus,
 		formatRouteDate,
 		getNavigationUrl,
+		getMobilityIcon,
+		MOBILITY_LABELS,
 		type DriverRouteResponse,
 		type DriverStop,
 		type StopStatus
@@ -20,8 +22,8 @@
 	onMount(async () => {
 		try {
 			route = await getDriverRoute(token);
-		} catch {
-			error = 'Nije moguće učitati rutu za navedeni token.';
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Nije moguće učitati rutu za navedeni token.';
 		} finally {
 			loading = false;
 		}
@@ -42,7 +44,7 @@
 
 <svelte:head>
 	<title>OptiCare — Ruta za vozača</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
 </svelte:head>
 
 <div class="driver-page-wrap">
@@ -52,14 +54,16 @@
 			<div class="header-left">
 				<img src={logo} alt="OptiCare" class="driver-logo" />
 				<div>
-					<div class="vehicle-title">{route?.vehicleTitle ?? 'Sanitetski prijevoz'}</div>
-					<div class="role-badge">{route?.driverRole ?? 'Vozač'}</div>
+					<div class="vehicle-title">{route?.vehicle_title ?? 'Sanitetski prijevoz'}</div>
+					<div class="role-badge">Vozač</div>
 				</div>
 			</div>
-			<div class="token-badge" title="Jednodnevni token">
-				<span class="token-dot"></span>
-				<span class="token-text">Link aktivan</span>
-			</div>
+			{#if !loading && !error && route}
+				<div class="token-badge" title="Jednodnevni token">
+					<span class="token-dot"></span>
+					<span class="token-text">Link aktivan</span>
+				</div>
+			{/if}
 		</header>
 
 		{#if loading}
@@ -76,7 +80,7 @@
 			<!-- Naslov i datum rute (formatiran u Europe/Zagreb) -->
 			<div class="route-hero">
 				<h1 class="main-title">Ruta prijevoza</h1>
-				<p class="subtitle">Preuzimanje pacijenata za današnje termine</p>
+				<p class="subtitle">Preuzimanje pacijenata za termine</p>
 
 				<div class="date-badge">
 					{formatRouteDate(route.date)}
@@ -90,31 +94,34 @@
 						<!-- Lijeva kolona: redni broj i vrijeme ukrcaja -->
 						<div class="stop-time-col">
 							<span class="stop-order">{stop.order}</span>
-							<span class="pickup-time-pill">{stop.pickupTime}</span>
+							<span class="pickup-time-pill">{stop.pickup_time}</span>
 						</div>
 
 						<div class="card-vertical-divider"></div>
 
 						<!-- Srednja kolona: Ime, Adresa, Rok u bolnici, Napomena o pokretljivosti, Navigacija -->
 						<div class="stop-details-col">
-							<h2 class="patient-name-heading">{stop.patientName}</h2>
+							<h2 class="patient-name-heading">{stop.patient_name}</h2>
 
 							<div class="address-line">
 								<span class="geo-pin" aria-hidden="true">📍</span>
 								<span class="address-text">{stop.address}</span>
 							</div>
 
-							<!-- Oznake: rok u bolnici za pacijenta + napomena o pokretljivosti -->
+							<!-- Oznake: rok u bolnici za pacijenta + prilagođena napomena o pokretljivosti s odgovarajućom ikonom -->
 							<div class="meta-tags-bar">
 								<span class="deadline-tag">
-									🏥 Termin: <strong>{stop.appointmentDeadline}</strong>
+									🏥 Termin: <strong>{stop.appointment_deadline}</strong>
 								</span>
 
-								{#if stop.mobilityNote}
-									<span class="mobility-tag">
-										♿ {stop.mobilityNote}
+								<span class="mobility-tag">
+									<span aria-hidden="true">{getMobilityIcon(stop.mobility_class)}</span>
+									<span>
+										{MOBILITY_LABELS[stop.mobility_class] ?? stop.mobility_class}{stop.mobility_note
+											? ` — ${stop.mobility_note}`
+											: ''}
 									</span>
-								{/if}
+								</span>
 							</div>
 
 							<!-- Tipka za navigaciju do adrese po stajalištu (E10-T1 [M]) -->
@@ -140,8 +147,8 @@
 								class:checked={stop.status === 'picked_up'}
 								aria-pressed={stop.status === 'picked_up'}
 								aria-label={stop.status === 'picked_up'
-									? `Pacijent ${stop.patientName} je preuzet. Kliknite za poništavanje.`
-									: `Označi pacijenta ${stop.patientName} kao preuzetog`}
+									? `Pacijent ${stop.patient_name} je preuzet. Kliknite za poništavanje.`
+									: `Označi pacijenta ${stop.patient_name} kao preuzetog`}
 								onclick={() => handleTogglePickup(stop)}
 							>
 								{#if stop.status === 'picked_up'}
@@ -170,7 +177,7 @@
 
 				<div class="footer-stat-col right-align">
 					<div class="stat-caption">Prvi termin u bolnici</div>
-					<div class="stat-deadline-val">{route.firstAppointmentTime}</div>
+					<div class="stat-deadline-val">{route.first_appointment_time}</div>
 				</div>
 			</footer>
 		{/if}
@@ -425,6 +432,9 @@
 		font-size: 0.85rem;
 		font-weight: 700;
 		line-height: 1.2;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 	}
 
 	/* Tipka za navigaciju (E10-T1 [M]) */

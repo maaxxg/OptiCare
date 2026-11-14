@@ -1,6 +1,30 @@
 // API klijent za vozačku rutu prema specifikaciji GET /driver/{token}/route i POST /driver/{token}/status.
 // Sukladno arhitekturi (E10-T1 [M]): prikazuje samo vrijeme ukrcaja, ime, adresu i napomenu o pokretljivosti,
 // bez odjela i bez razloga pregleda (zaštita privatnosti).
+// Sva polja prate snake_case konvenciju backend Pydantic modela.
+
+export type MobilityClass = 'walks' | 'cane' | 'wheelchair' | 'stretcher';
+
+export const MOBILITY_LABELS: Record<MobilityClass, string> = {
+	walks: 'Hoda',
+	cane: 'Štap',
+	wheelchair: 'Kolica',
+	stretcher: 'Nosila'
+};
+
+export function getMobilityIcon(mobilityClass: MobilityClass): string {
+	switch (mobilityClass) {
+		case 'cane':
+			return '🦯';
+		case 'wheelchair':
+			return '♿';
+		case 'stretcher':
+			return '🛏️';
+		case 'walks':
+		default:
+			return '🚶';
+	}
+}
 
 export type StopStatus =
 	'pending' | 'arrived' | 'picked_up' | 'dropped_off' | 'no_show' | 'delayed';
@@ -8,72 +32,75 @@ export type StopStatus =
 export interface DriverStop {
 	id: string;
 	order: number;
-	pickupTime: string; // format "07:15"
-	patientName: string;
+	pickup_time: string; // format "07:15"
+	patient_name: string;
 	address: string;
-	mobilityNote?: string; // npr. "Samostalno pokretan", "Invalidska kolica", "Kat 2 bez lifta, pomoć do vozila"
-	appointmentDeadline: string; // rok/termin u bolnici za ovog pacijenta, npr. "09:00", "09:30"
+	mobility_class: MobilityClass;
+	mobility_note?: string | null;
+	appointment_deadline: string; // npr. "09:00", "09:30"
 	status: StopStatus;
 }
 
 export interface DriverRouteResponse {
 	token: string;
-	vehicleTitle: string; // npr. "Sanitetski prijevoz — Gospić 1"
-	driverRole: string; // "Vozač"
+	vehicle_title: string; // npr. "Sanitetski prijevoz — Gospić 1"
 	date: string; // "2026-11-18" (formatiran u Europe/Zagreb)
 	destination: string; // "Opća bolnica Gospić"
-	firstAppointmentTime: string; // "09:00" - prvi termin u bolnici na ovoj ruti
+	first_appointment_time: string; // "09:00" - prvi termin u bolnici na ovoj ruti
 	stops: DriverStop[];
 }
 
-// Inicijalni mock podaci ako backend E7 još nije aktivan
+// Inicijalni mock podaci samo za demo rutu (E10-T1 [M]).
 const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 	demo: {
 		token: 'demo',
-		vehicleTitle: 'Sanitetski prijevoz — Gospić 1',
-		driverRole: 'Vozač',
+		vehicle_title: 'Sanitetski prijevoz — Gospić 1',
 		date: '2026-11-18', // 18. 11. 2026. je srijeda
 		destination: 'Opća bolnica Gospić',
-		firstAppointmentTime: '09:00',
+		first_appointment_time: '09:00',
 		stops: [
 			{
 				id: 'stop-1',
 				order: 1,
-				pickupTime: '07:15',
-				patientName: 'Marko Horvat',
+				pickup_time: '07:15',
+				patient_name: 'Marko Horvat',
 				address: 'Ulica Lipova 12, Gornje Selo',
-				mobilityNote: 'Samostalno pokretan, pomoć pri ulasku',
-				appointmentDeadline: '09:00',
+				mobility_class: 'walks',
+				mobility_note: 'Pomoć pri ulasku',
+				appointment_deadline: '09:00',
 				status: 'picked_up'
 			},
 			{
 				id: 'stop-2',
 				order: 2,
-				pickupTime: '07:25',
-				patientName: 'Ana Kovač',
+				pickup_time: '07:25',
+				patient_name: 'Ana Kovač',
 				address: 'Bregovita 5, Donje Selo',
-				mobilityNote: 'Teže pokretna (štap)',
-				appointmentDeadline: '09:15',
+				mobility_class: 'cane',
+				mobility_note: 'Teže pokretna',
+				appointment_deadline: '09:15',
 				status: 'picked_up'
 			},
 			{
 				id: 'stop-3',
 				order: 3,
-				pickupTime: '07:40',
-				patientName: 'Ivan Marić',
+				pickup_time: '07:40',
+				patient_name: 'Ivan Marić',
 				address: 'Vrtna 18, Gornje Selo',
-				mobilityNote: 'Invalidska kolica (potrebna rampa)',
-				appointmentDeadline: '09:30',
+				mobility_class: 'wheelchair',
+				mobility_note: 'Potrebna rampa za kolica',
+				appointment_deadline: '09:30',
 				status: 'pending'
 			},
 			{
 				id: 'stop-4',
 				order: 4,
-				pickupTime: '07:55',
-				patientName: 'Marija Novak',
+				pickup_time: '07:55',
+				patient_name: 'Marija Novak',
 				address: 'Školska 3, Donje Selo',
-				mobilityNote: '1. kat bez lifta, potrebna pratnja do vozila',
-				appointmentDeadline: '10:00',
+				mobility_class: 'walks',
+				mobility_note: '1. kat bez lifta, pratnja do vozila',
+				appointment_deadline: '10:00',
 				status: 'pending'
 			}
 		]
@@ -89,25 +116,23 @@ const USE_BACKEND = false;
 
 /**
  * Dohvaća rutu vozača preko jednodnevnog tokena: GET /driver/{token}/route
+ * Ako token nije valjan ili ruta nije pronađena, funkcija baca iznimku kako bi se prikazao ekran greške.
  */
 export async function getDriverRoute(token: string): Promise<DriverRouteResponse> {
 	if (USE_BACKEND) {
-		try {
-			const res = await fetch(`/api/driver/${encodeURIComponent(token)}/route`);
-			if (res.ok) {
-				const data = (await res.json()) as DriverRouteResponse;
-				return data;
-			}
-		} catch {
-			// Backend nije dostupan — koristi mock ugovor
+		const res = await fetch(`/api/driver/${encodeURIComponent(token)}/route`);
+		if (!res.ok) {
+			throw new Error(`Ruta za navedeni link nije pronađena (${res.status}).`);
 		}
+		const data = (await res.json()) as DriverRouteResponse;
+		return data;
 	}
 
-	// Mock odgovor točno u formatu GET /driver/{token}/route
-	const base = MOCK_ROUTES[token] ?? {
-		...MOCK_ROUTES.demo,
-		token
-	};
+	// Mock je definiran isključivo za 'demo' token; svi ostali tokeni završavaju greškom
+	const base = MOCK_ROUTES[token];
+	if (!base) {
+		throw new Error('Ruta za ovaj link nije pronađena ili je istekla.');
+	}
 
 	// Primijeni lokalno ažurirane statuse za ovaj token
 	const tokenStatuses = memoryStatusStore.get(token);
@@ -121,7 +146,10 @@ export async function getDriverRoute(token: string): Promise<DriverRouteResponse
 		};
 	}
 
-	return base;
+	return {
+		...base,
+		stops: base.stops.map((s) => ({ ...s }))
+	};
 }
 
 /**
@@ -133,16 +161,15 @@ export async function updateDriverStopStatus(
 	status: StopStatus
 ): Promise<void> {
 	if (USE_BACKEND) {
-		try {
-			const res = await fetch(`/api/driver/${encodeURIComponent(token)}/status`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ stopId, status, timestamp: new Date().toISOString() })
-			});
-			if (res.ok) return;
-		} catch {
-			// fallback
+		const res = await fetch(`/api/driver/${encodeURIComponent(token)}/status`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ stop_id: stopId, status, timestamp: new Date().toISOString() })
+		});
+		if (!res.ok) {
+			throw new Error(`Greška pri ažuriranju statusa (${res.status}).`);
 		}
+		return;
 	}
 
 	// Zabilježi lokalno u memoriji
@@ -157,31 +184,19 @@ export async function updateDriverStopStatus(
  */
 export function formatRouteDate(isoDateStr: string): string {
 	if (!isoDateStr) return '';
-	// Parsiramo datum vodeći računa o vremenskoj zoni Europe/Zagreb
-	const parts = isoDateStr.split('-');
-	if (parts.length === 3) {
-		const year = parseInt(parts[0], 10);
-		const month = parseInt(parts[1], 10) - 1;
-		const day = parseInt(parts[2], 10);
-		const d = new Date(Date.UTC(year, month, day, 12, 0, 0));
-		const formatter = new Intl.DateTimeFormat('hr-HR', {
-			timeZone: 'Europe/Zagreb',
-			weekday: 'long',
-			day: 'numeric',
-			month: 'long'
-		});
-		const formatted = formatter.format(d);
-		return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-	}
+	const [y, m, d] = isoDateStr.split('-').map(Number);
+	const date =
+		!isNaN(y) && !isNaN(m) && !isNaN(d)
+			? new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+			: new Date(isoDateStr);
 
-	const d = new Date(isoDateStr);
-	const formatter = new Intl.DateTimeFormat('hr-HR', {
+	const formatted = new Intl.DateTimeFormat('hr-HR', {
 		timeZone: 'Europe/Zagreb',
 		weekday: 'long',
 		day: 'numeric',
 		month: 'long'
-	});
-	const formatted = formatter.format(d);
+	}).format(date);
+
 	return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
