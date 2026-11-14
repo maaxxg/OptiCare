@@ -33,6 +33,11 @@ from app.models import (
     make_point_wkt,
 )
 from app.plan_api import router as plan_router
+from app.predictors import (
+    PredictorConfigError,
+    get_predictor_registry,
+    predictors_router,
+)
 from app.schemas import (
     FacilityRead,
     GeocodeRequest,
@@ -105,6 +110,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         get_codebooks()
     except CodebookError as exc:
         raise StartupCheckError(f"Codebooks are invalid: {exc}") from exc
+    try:
+        get_predictor_registry()
+    except PredictorConfigError as exc:
+        raise StartupCheckError(f"Predictors configuration is invalid: {exc}") from exc
     check_routing_config()
     if get_settings().check_db_on_startup:
         from app.db import engine
@@ -126,6 +135,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="OptiCare", lifespan=lifespan)
 app.include_router(plan_router)
+app.include_router(predictors_router)
 
 
 @app.get("/health")

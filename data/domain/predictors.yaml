@@ -1,0 +1,19 @@
+# Konfiguracija registra prediktora (E4-T1, KAN-28).
+# Svakom mjestu pridružuje aktivnu implementaciju ("rules", "model:<putanja>" ili "unset").
+# Zamjena pravila istreniranim modelom je promjena jednog retka u odjeljku `slots`.
+
+slots:
+  visit_duration: rules
+  service_time: rules
+  support_need: rules
+  travel_time: rules
+  demand: unset
+
+# Dopušteni rasponi predikcija po mjestu (ARHITEKTURA §7 i §10).
+# Ako model vrati vrijednost izvan [min, max] ili NaN/Inf, registar se vraća na pravilo.
+ranges:
+  visit_duration: {min: 5.0, max: 480.0, unit: min}
+  service_time:   {min: 1.0, max: 60.0,  unit: min}
+  support_need:   {min: 0.0, max: 1.0,   unit: score}
+  travel_time:    {min: 0.1, max: 600.0, unit: min}
+  demand:         {min: 0.0, max: 500.0, unit: requests}
