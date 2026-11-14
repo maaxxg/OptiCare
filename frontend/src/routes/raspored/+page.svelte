@@ -44,7 +44,7 @@
 		{
 			firstName: "Vili",
 			lastName: "Cenko",
-			examType: "Pregled mikropenisa",
+			examType: "Kardiološki pregled",
 			clinic: "KBC Rebro",
 			examTime: "12:00",
 			departureTime: "7:30",
@@ -65,7 +65,7 @@
 		{
 			firstName: "Vili",
 			lastName: "Cenko",
-			examType: "Pregled mikropenisa",
+			examType: "Kardiološki pregled",
 			clinic: "KBC Rebro",
 			examTime: "12:00",
 			departureTime: "7:30",
@@ -211,13 +211,19 @@
 								<div class="col-exam">{row.examType}</div>
 								<div class="col-clinic">{row.clinic}</div>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.departureTime}</span>
+									<span class="time-badge-pill"
+										>{row.departureTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.examTime}</span>
+									<span class="time-badge-pill"
+										>{row.examTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.arrivalTime}</span>
+									<span class="time-badge-pill"
+										>{row.arrivalTime}</span
+									>
 								</span>
 							</div>
 						{/each}
@@ -238,13 +244,19 @@
 								<div class="col-exam">{row.examType}</div>
 								<div class="col-clinic">{row.clinic}</div>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.departureTime}</span>
+									<span class="time-badge-pill"
+										>{row.departureTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.examTime}</span>
+									<span class="time-badge-pill"
+										>{row.examTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.arrivalTime}</span>
+									<span class="time-badge-pill"
+										>{row.arrivalTime}</span
+									>
 								</span>
 							</div>
 						{/each}
@@ -263,13 +275,19 @@
 								<div class="col-exam">{row.examType}</div>
 								<div class="col-clinic">{row.clinic}</div>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.departureTime}</span>
+									<span class="time-badge-pill"
+										>{row.departureTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.examTime}</span>
+									<span class="time-badge-pill"
+										>{row.examTime}</span
+									>
 								</span>
 								<span class="center-col">
-									<span class="time-badge-pill">{row.arrivalTime}</span>
+									<span class="time-badge-pill"
+										>{row.arrivalTime}</span
+									>
 								</span>
 							</div>
 						{/each}
