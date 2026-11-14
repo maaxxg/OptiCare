@@ -12,6 +12,7 @@ export interface DriverStop {
 	patientName: string;
 	address: string;
 	mobilityNote?: string; // npr. "Samostalno pokretan", "Invalidska kolica", "Kat 2 bez lifta, pomoć do vozila"
+	appointmentDeadline: string; // rok/termin u bolnici za ovog pacijenta, npr. "09:00", "09:30"
 	status: StopStatus;
 }
 
@@ -21,7 +22,7 @@ export interface DriverRouteResponse {
 	driverRole: string; // "Vozač"
 	date: string; // "2026-11-18" (formatiran u Europe/Zagreb)
 	destination: string; // "Opća bolnica Gospić"
-	hospitalDeadline: string; // "09:00"
+	firstAppointmentTime: string; // "09:00" - prvi termin u bolnici na ovoj ruti
 	stops: DriverStop[];
 }
 
@@ -33,7 +34,7 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 		driverRole: 'Vozač',
 		date: '2026-11-18', // 18. 11. 2026. je srijeda
 		destination: 'Opća bolnica Gospić',
-		hospitalDeadline: '09:00',
+		firstAppointmentTime: '09:00',
 		stops: [
 			{
 				id: 'stop-1',
@@ -42,6 +43,7 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 				patientName: 'Marko Horvat',
 				address: 'Ulica Lipova 12, Gornje Selo',
 				mobilityNote: 'Samostalno pokretan, pomoć pri ulasku',
+				appointmentDeadline: '09:00',
 				status: 'picked_up'
 			},
 			{
@@ -51,6 +53,7 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 				patientName: 'Ana Kovač',
 				address: 'Bregovita 5, Donje Selo',
 				mobilityNote: 'Teže pokretna (štap)',
+				appointmentDeadline: '09:15',
 				status: 'picked_up'
 			},
 			{
@@ -60,6 +63,7 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 				patientName: 'Ivan Marić',
 				address: 'Vrtna 18, Gornje Selo',
 				mobilityNote: 'Invalidska kolica (potrebna rampa)',
+				appointmentDeadline: '09:30',
 				status: 'pending'
 			},
 			{
@@ -69,6 +73,7 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 				patientName: 'Marija Novak',
 				address: 'Školska 3, Donje Selo',
 				mobilityNote: '1. kat bez lifta, potrebna pratnja do vozila',
+				appointmentDeadline: '10:00',
 				status: 'pending'
 			}
 		]

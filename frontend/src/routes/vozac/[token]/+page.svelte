@@ -17,9 +17,6 @@
 	let loading = $state(true);
 	let error = $state('');
 
-	// Odabrani status meni za detaljne statuse
-	let activeStatusMenuStopId = $state<string | null>(null);
-
 	onMount(async () => {
 		try {
 			route = await getDriverRoute(token);
@@ -30,48 +27,17 @@
 		}
 	});
 
-	async function handleQuickToggle(stop: DriverStop) {
+	async function handleTogglePickup(stop: DriverStop) {
 		if (!route) return;
 		const newStatus: StopStatus = stop.status === 'picked_up' ? 'pending' : 'picked_up';
 		stop.status = newStatus;
 		await updateDriverStopStatus(token, stop.id, newStatus);
 	}
 
-	async function handleSetStatus(stop: DriverStop, newStatus: StopStatus) {
-		if (!route) return;
-		stop.status = newStatus;
-		activeStatusMenuStopId = null;
-		await updateDriverStopStatus(token, stop.id, newStatus);
-	}
-
-	function toggleStatusMenu(stopId: string, e: MouseEvent) {
-		e.stopPropagation();
-		activeStatusMenuStopId = activeStatusMenuStopId === stopId ? null : stopId;
-	}
-
-	// Broj putnika koji još nisu ukrcani niti iskrcani
+	// Broj putnika koji još nisu preuzeti
 	let remainingCount = $derived(
-		route
-			? route.stops.filter((s) => s.status !== 'picked_up' && s.status !== 'dropped_off').length
-			: 0
+		route ? route.stops.filter((s) => s.status !== 'picked_up').length : 0
 	);
-
-	function getStatusLabel(status: StopStatus): string {
-		switch (status) {
-			case 'picked_up':
-				return 'Ukrcan';
-			case 'arrived':
-				return 'Stigao';
-			case 'dropped_off':
-				return 'Iskrcan';
-			case 'no_show':
-				return 'Pacijenta nema';
-			case 'delayed':
-				return 'Kasnim';
-			default:
-				return 'Čeka';
-		}
-	}
 </script>
 
 <svelte:head>
@@ -107,7 +73,7 @@
 				<p>{error || 'Ruta za ovaj link nije pronađena ili je istekla.'}</p>
 			</div>
 		{:else}
-			<!-- Naslov i datum rute -->
+			<!-- Naslov i datum rute (formatiran u Europe/Zagreb) -->
 			<div class="route-hero">
 				<h1 class="main-title">Ruta prijevoza</h1>
 				<p class="subtitle">Preuzimanje pacijenata za današnje termine</p>
@@ -120,13 +86,7 @@
 			<!-- Popis stajališta -->
 			<section class="stops-container" aria-label="Stajališta rute">
 				{#each route.stops as stop (stop.id)}
-					<article
-						class="stop-row-card"
-						class:status-picked={stop.status === 'picked_up'}
-						class:status-dropped={stop.status === 'dropped_off'}
-						class:status-noshow={stop.status === 'no_show'}
-						class:status-delayed={stop.status === 'delayed'}
-					>
+					<article class="stop-row-card" class:status-picked={stop.status === 'picked_up'}>
 						<!-- Lijeva kolona: redni broj i vrijeme ukrcaja -->
 						<div class="stop-time-col">
 							<span class="stop-order">{stop.order}</span>
@@ -135,7 +95,7 @@
 
 						<div class="card-vertical-divider"></div>
 
-						<!-- Srednja kolona: Ime, Adresa, Napomena o pokretljivosti, Navigacija -->
+						<!-- Srednja kolona: Ime, Adresa, Rok u bolnici, Napomena o pokretljivosti, Navigacija -->
 						<div class="stop-details-col">
 							<h2 class="patient-name-heading">{stop.patientName}</h2>
 
@@ -144,7 +104,20 @@
 								<span class="address-text">{stop.address}</span>
 							</div>
 
-							<!-- Tipka za navigaciju do adrese (E10-T1 [M]) -->
+							<!-- Oznake: rok u bolnici za pacijenta + napomena o pokretljivosti -->
+							<div class="meta-tags-bar">
+								<span class="deadline-tag">
+									🏥 Termin: <strong>{stop.appointmentDeadline}</strong>
+								</span>
+
+								{#if stop.mobilityNote}
+									<span class="mobility-tag">
+										♿ {stop.mobilityNote}
+									</span>
+								{/if}
+							</div>
+
+							<!-- Tipka za navigaciju do adrese po stajalištu (E10-T1 [M]) -->
 							<div class="nav-action-bar">
 								<a
 									href={getNavigationUrl(stop.address)}
@@ -156,87 +129,37 @@
 									<span class="nav-icon" aria-hidden="true">🧭</span>
 									<span>Navigacija</span>
 								</a>
-
-								{#if stop.mobilityNote}
-									<span class="mobility-tag">
-										♿ {stop.mobilityNote}
-									</span>
-								{/if}
 							</div>
 						</div>
 
-						<!-- Desna kolona: Glavna tipka ukrcaja i izbornik statusa -->
+						<!-- Desna kolona: Pravi pristupačni <button> s aria-pressed za status preuzimanja -->
 						<div class="stop-action-col">
-							<!-- Glavni brzi checkbox/gumb za ukrcaj -->
 							<button
 								type="button"
-								class="quick-toggle-btn"
-								class:active={stop.status === 'picked_up'}
-								onclick={() => handleQuickToggle(stop)}
-								aria-label="Označi pacijenta {stop.patientName} kao ukrcanog"
-								title="Klikni za brzo označavanje ukrcaja"
+								class="check-box-btn"
+								class:checked={stop.status === 'picked_up'}
+								aria-pressed={stop.status === 'picked_up'}
+								aria-label={stop.status === 'picked_up'
+									? `Pacijent ${stop.patientName} je preuzet. Kliknite za poništavanje.`
+									: `Označi pacijenta ${stop.patientName} kao preuzetog`}
+								onclick={() => handleTogglePickup(stop)}
 							>
 								{#if stop.status === 'picked_up'}
-									<span class="check-symbol">✓</span>
-								{:else if stop.status === 'dropped_off'}
-									<span class="status-symbol">🏠</span>
-								{:else if stop.status === 'no_show'}
-									<span class="status-symbol">✕</span>
-								{:else if stop.status === 'delayed'}
-									<span class="status-symbol">⏱</span>
+									<span class="checkmark" aria-hidden="true">✓</span>
 								{/if}
 							</button>
-
-							<!-- Dodatne tipke statusa (Stigao, Ukrcan, Iskrcan, Pacijenta nema, Kasnim) -->
-							<div class="status-menu-wrap">
-								<button
-									type="button"
-									class="status-menu-trigger"
-									onclick={(e) => toggleStatusMenu(stop.id, e)}
-									aria-label="Ostali statusi"
-								>
-									{getStatusLabel(stop.status)} ▾
-								</button>
-
-								{#if activeStatusMenuStopId === stop.id}
-									<div class="status-dropdown">
-										<button
-											type="button"
-											class="status-opt"
-											onclick={() => handleSetStatus(stop, 'arrived')}>📍 Stigao</button
-										>
-										<button
-											type="button"
-											class="status-opt"
-											onclick={() => handleSetStatus(stop, 'picked_up')}>✓ Ukrcan</button
-										>
-										<button
-											type="button"
-											class="status-opt"
-											onclick={() => handleSetStatus(stop, 'dropped_off')}>🏥 Iskrcan</button
-										>
-										<button
-											type="button"
-											class="status-opt opt-danger"
-											onclick={() => handleSetStatus(stop, 'no_show')}>✕ Pacijenta nema</button
-										>
-										<button
-											type="button"
-											class="status-opt opt-warning"
-											onclick={() => handleSetStatus(stop, 'delayed')}>⏱ Kasnim</button
-										>
-									</div>
-								{/if}
-							</div>
+							<span class="check-label">
+								{stop.status === 'picked_up' ? 'Preuzet' : 'Čeka'}
+							</span>
 						</div>
 					</article>
 				{/each}
 			</section>
 
-			<!-- Donja statistička kartica -->
+			<!-- Donja statistička kartica: Još za preuzeti i Prvi termin u bolnici -->
 			<footer class="route-footer-card">
 				<div class="footer-stat-col">
-					<div class="stat-caption">Preostalo za pokupiti</div>
+					<div class="stat-caption">Još za preuzeti</div>
 					<div class="stat-number-row">
 						<span class="stat-large-val">{remainingCount}</span>
 						<span class="stat-unit-label">putnika</span>
@@ -246,8 +169,8 @@
 				<div class="footer-divider"></div>
 
 				<div class="footer-stat-col right-align">
-					<div class="stat-caption">Najkasnije vrijeme dolaska u bolnicu</div>
-					<div class="stat-deadline-val">{route.hospitalDeadline}</div>
+					<div class="stat-caption">Prvi termin u bolnici</div>
+					<div class="stat-deadline-val">{route.firstAppointmentTime}</div>
 				</div>
 			</footer>
 		{/if}
@@ -399,7 +322,6 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		position: relative;
 		transition:
 			background 0.2s,
 			border-color 0.2s;
@@ -408,11 +330,6 @@
 	.stop-row-card.status-picked {
 		background: #eef6eb;
 		border-color: #8bbd83;
-	}
-
-	.stop-row-card.status-noshow {
-		background: #fdf2f2;
-		border-color: #f0c0c0;
 	}
 
 	.stop-time-col {
@@ -443,7 +360,7 @@
 
 	.card-vertical-divider {
 		width: 1.5px;
-		height: 48px;
+		height: 52px;
 		background: #cbdcc8;
 		flex-shrink: 0;
 	}
@@ -454,7 +371,7 @@
 	}
 
 	.patient-name-heading {
-		font-size: 1.3rem;
+		font-size: 1.35rem;
 		font-weight: 800;
 		color: #1a1a1a;
 		line-height: 1.2;
@@ -465,7 +382,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 4px;
-		font-size: 0.98rem;
+		font-size: 1rem;
 		color: #333333;
 		margin-bottom: 8px;
 		line-height: 1.25;
@@ -481,23 +398,51 @@
 		word-break: break-word;
 	}
 
-	.nav-action-bar {
+	.meta-tags-bar {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: 6px;
+		margin-bottom: 10px;
+	}
+
+	.deadline-tag {
+		background: #ffffff;
+		color: #1a1a1a;
+		border: 1px solid #bfd3bb;
+		padding: 4px 10px;
+		border-radius: 999px;
+		font-size: 0.88rem;
+		font-weight: 600;
+	}
+
+	.mobility-tag {
+		background: #e6eee2;
+		color: #275d21;
+		border: 1px solid #b6d3b0;
+		padding: 4px 10px;
+		border-radius: 999px;
+		font-size: 0.85rem;
+		font-weight: 700;
+		line-height: 1.2;
 	}
 
 	/* Tipka za navigaciju (E10-T1 [M]) */
+	.nav-action-bar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
 	.btn-navigate {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		background: #1a1a1a;
 		color: #ffffff;
-		padding: 7px 14px;
+		padding: 8px 16px;
 		border-radius: 999px;
-		font-size: 0.92rem;
+		font-size: 0.95rem;
 		font-weight: 700;
 		text-decoration: none;
 		transition:
@@ -515,120 +460,55 @@
 	}
 
 	.nav-icon {
-		font-size: 1rem;
+		font-size: 1.05rem;
 	}
 
-	.mobility-tag {
-		background: #e6eee2;
-		color: #2e6224;
-		border: 1px solid #b6d3b0;
-		padding: 4px 10px;
-		border-radius: 999px;
-		font-size: 0.85rem;
-		font-weight: 700;
-		line-height: 1.2;
-	}
-
-	/* Desna kolona i statusi */
+	/* Desna kolona: Pravi semantički gumb s aria-pressed */
 	.stop-action-col {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: 4px;
 		flex-shrink: 0;
 	}
 
-	.quick-toggle-btn {
-		width: 44px;
-		height: 44px;
-		border-radius: 12px;
+	.check-box-btn {
+		width: 48px;
+		height: 48px;
+		border-radius: 14px;
 		border: 2px solid #1a1a1a;
 		background: #ffffff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
+		padding: 0;
 		transition:
 			background 0.15s,
+			border-color 0.15s,
 			transform 0.1s;
 	}
 
-	.quick-toggle-btn.active {
+	.check-box-btn.checked {
 		background: #55914a;
 		border-color: #3b7431;
 	}
 
-	.quick-toggle-btn:active {
+	.check-box-btn:active {
 		transform: scale(0.93);
 	}
 
-	.check-symbol {
+	.checkmark {
 		color: #ffffff;
-		font-size: 1.5rem;
+		font-size: 1.7rem;
 		font-weight: 900;
 		line-height: 1;
 	}
 
-	.status-symbol {
-		font-size: 1.2rem;
-	}
-
-	.status-menu-wrap {
-		position: relative;
-	}
-
-	.status-menu-trigger {
-		background: none;
-		border: none;
+	.check-label {
 		font-size: 0.8rem;
 		font-weight: 700;
-		color: #55874c;
-		cursor: pointer;
-		padding: 2px 4px;
-		white-space: nowrap;
-	}
-
-	.status-menu-trigger:hover {
-		text-decoration: underline;
-	}
-
-	.status-dropdown {
-		position: absolute;
-		right: 0;
-		top: 100%;
-		background: #ffffff;
-		border: 1.5px solid #222222;
-		border-radius: 12px;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-		z-index: 100;
-		display: flex;
-		flex-direction: column;
-		min-width: 140px;
-		overflow: hidden;
-	}
-
-	.status-opt {
-		background: none;
-		border: none;
-		padding: 10px 14px;
-		text-align: left;
-		font-size: 0.95rem;
-		font-weight: 700;
-		color: #1a1a1a;
-		cursor: pointer;
-		transition: background 0.1s;
-	}
-
-	.status-opt:hover {
-		background: #eef5ec;
-	}
-
-	.status-opt.opt-danger {
-		color: #c0392b;
-	}
-
-	.status-opt.opt-warning {
-		color: #b7791f;
+		color: #444444;
 	}
 
 	/* ─── Footer statistika ─────────────────────── */
@@ -652,7 +532,7 @@
 	}
 
 	.stat-caption {
-		font-size: 0.9rem;
+		font-size: 0.95rem;
 		font-weight: 700;
 		color: #444444;
 		margin-bottom: 6px;
