@@ -5,6 +5,7 @@ from datetime import date
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models import TransportEntitlement, VehicleProviderType
 from app.plan_schemas import PlanResponse, StopKind
 
 
@@ -43,6 +44,8 @@ def test_plan_references_are_consistent() -> None:
                 assert s.assignment_id is None
             else:
                 assert s.assignment_id in assignment_ids
+        for prev, nxt in zip(v.stops, v.stops[1:], strict=False):
+            assert prev.departure_time <= nxt.arrival_time
     for u in plan.unserved:
         assert u.reason_text.strip()
         assert u.request_id not in {a.request_id for a in plan.assignments}
@@ -50,3 +53,26 @@ def test_plan_references_are_consistent() -> None:
 
 def test_plan_never_contains_mbo() -> None:
     assert "mbo" not in TestClient(app).get("/plan").text.lower()
+
+
+def test_stops_match_legs_and_sanitetski_only_for_entitled() -> None:
+    plan = PlanResponse.model_validate(_get())
+    by_id = {a.id: a for a in plan.assignments}
+    for v in plan.vehicles:
+        for s in v.stops:
+            if s.assignment_id is None:
+                continue
+            a = by_id[s.assignment_id]
+            if v.provider_type == VehicleProviderType.SANITETSKI:
+                assert a.patient.transport_entitlement == TransportEntitlement.SANITETSKI
+            if s.kind == StopKind.PICKUP_HOME:
+                assert (a.outbound.vehicle_id, a.outbound.pickup_time) == (v.id, s.arrival_time)
+            elif s.kind == StopKind.DROPOFF_FACILITY:
+                assert a.outbound.facility_arrival_time == s.arrival_time
+                assert s.arrival_time <= a.slot.start_time
+            elif s.kind == StopKind.PICKUP_FACILITY:
+                assert a.return_leg is not None
+                assert (a.return_leg.vehicle_id, a.return_leg.pickup_time) == (v.id, s.arrival_time)
+            elif s.kind == StopKind.DROPOFF_HOME:
+                assert a.return_leg is not None
+                assert a.return_leg.home_dropoff_time == s.arrival_time

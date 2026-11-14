@@ -328,8 +328,8 @@ def build_mock_plan(plan_date: date, now: datetime | None = None) -> PlanRespons
             urgency_class=UrgencyClass.WITHIN_WEEK,
             earliest_date=plan_date,
             latest_date=plan_date,
-            reason=UnservedReason.NO_VEHICLE_CAPACITY,
-            reason_text="Nijedno vozilo u smjeni nema slobodno mjesto za taj dan.",
+            reason=UnservedReason.NO_SLOT_IN_WINDOW,
+            reason_text="Nema slobodnog termina u traženom razdoblju.",
         ),
         UnservedRequest(
             request_id=10,

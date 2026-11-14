@@ -7,14 +7,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query
 
-from app.plan_mock import build_mock_plan
+from app.plan_mock import ZAGREB, build_mock_plan
 from app.plan_schemas import PlanResponse
-
-ZAGREB = ZoneInfo("Europe/Zagreb")
 
 router = APIRouter(tags=["plan"])
 
