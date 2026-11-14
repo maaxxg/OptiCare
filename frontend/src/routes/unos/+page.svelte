@@ -44,7 +44,7 @@
 			return;
 		}
 		if (!description.trim()) {
-			error = 'Unesite opis pacijentovog problema.';
+			error = 'Unesite opis problema pacijenta.';
 			return;
 		}
 
@@ -86,7 +86,7 @@
 		<button class="back-link" onclick={goBack}>← Povratak</button>
 	</div>
 
-	<h1 class="page-title">Ispunite pacijentove podatke</h1>
+	<h1 class="page-title">Ispunite podatke o pacijentu</h1>
 
 	<form onsubmit={handleSubmit} class="intake-form">
 		<div class="two-col">
@@ -167,7 +167,7 @@
 		</div>
 
 		<div class="form-group" style="margin-top: 20px;">
-			<label class="form-label" for="description">Opis pacijentovog problema</label>
+			<label class="form-label" for="description">Opis problema pacijenta</label>
 			<textarea id="description" class="form-textarea" bind:value={description}></textarea>
 		</div>
 

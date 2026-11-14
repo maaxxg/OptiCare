@@ -58,9 +58,9 @@
 					<span>Osoba</span>
 					<span>Opis problema</span>
 					<span>Mjesto stanovanja</span>
-					<span class="center-col">Polazak</span>
+					<span class="center-col">Vrijeme polaska</span>
 					<span class="center-col">Vrijeme pregleda</span>
-					<span class="center-col">Povratak</span>
+					<span class="center-col">Vrijeme povratka</span>
 				</div>
 
 				{#each groups as group (group.color)}
