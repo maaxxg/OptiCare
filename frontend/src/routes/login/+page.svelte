@@ -76,12 +76,6 @@
 			<button type="submit" class="btn-primary" disabled={loading}>
 				{loading ? 'Prijava…' : 'Prijavi se'}
 			</button>
-
-			<div class="mobile-switch-wrap">
-				<a href={resolve('/mobilno/login')} class="mobile-switch-link">
-					📱 Otvori mobilno sučelje za vozače →
-				</a>
-			</div>
 		</form>
 	</div>
 </div>
@@ -142,17 +136,5 @@
 	.btn-primary:disabled {
 		opacity: 0.7;
 		cursor: not-allowed;
-	}
-
-	.mobile-switch-wrap {
-		margin-top: 20px;
-		text-align: center;
-	}
-
-	.mobile-switch-link {
-		font-size: 0.9rem;
-		color: #2e6226;
-		text-decoration: underline;
-		font-weight: 600;
 	}
 </style>

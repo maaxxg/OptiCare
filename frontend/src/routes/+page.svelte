@@ -1,10 +1,19 @@
 <script lang="ts">
 	import logo from '#lib/assets/opticare-logo.svg';
-	import { getDoctorName, logout } from '#lib/stores/auth.js';
+	import { getDoctorName, isLoggedIn, logout } from '#lib/stores/auth.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 
-	const doctorName = getDoctorName();
+	let doctorName = $state(getDoctorName());
+
+	onMount(() => {
+		if (!isLoggedIn()) {
+			goto(resolve('/login'));
+		} else {
+			doctorName = getDoctorName();
+		}
+	});
 
 	function handleLogout() {
 		logout();
@@ -33,9 +42,6 @@
 	<div class="dashboard-actions">
 		<a href={resolve('/unos')} class="action-card">Unos podataka o pacijentu</a>
 		<a href={resolve('/raspored')} class="action-card">Raspored</a>
-		<a href={resolve('/mobilno')} class="action-card action-card-mobile"
-			>📱 Mobilno sučelje (za vozače)</a
-		>
 	</div>
 </div>
 
@@ -45,16 +51,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-	}
-
-	.action-card-mobile {
-		background: #ffffff;
-		color: #2e6226;
-		border: 2px dashed #92c18b;
-	}
-
-	.action-card-mobile:hover {
-		background: #e8eed9;
 	}
 
 	.doctor-name {
