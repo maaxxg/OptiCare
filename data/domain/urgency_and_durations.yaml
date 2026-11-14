@@ -48,6 +48,21 @@ visit_types:
     label: Zahvat ili pretraga
   - key: dialysis_session
     label: Dijaliza (seansa)
+  - key: chemotherapy
+    label: Kemoterapija
+  - key: radiotherapy
+    label: Zračenje (radioterapija)
+
+# Željeni dio dana za termin (VisitRequest.preferred_time_of_day). Granica je podne: Hrvatski
+# jezični portal, "prijepodne" = "doba dana, vrijeme od jutra do dvanaest sati".
+# Termin pripada dijelu dana prema vremenu početka: before_hour isključivo.
+times_of_day:
+  - key: morning
+    label: Prijepodne
+    before_hour: 12
+  - key: afternoon
+    label: Poslijepodne
+    before_hour: 24
 
 # max_shift_days: koliko se dana termin smije pomaknuti od željenog datuma.
 # unserved_penalty_rank: samo poredak (veći broj = veća kazna za neposlužen zahtjev);
@@ -60,7 +75,7 @@ urgency_classes:
     unserved_penalty_rank: 4
   - key: within_few_days
     label: U roku od nekoliko dana
-    max_shift_days: 3        # REVIEW: je li 3 dana razumna gornja granica?
+    max_shift_days: 3        # PROCJENA (nije pronađen dobar izvor); "nekoliko dana" = do 3
     unserved_penalty_rank: 3
   - key: within_week
     label: U roku od tjedan dana
@@ -68,13 +83,13 @@ urgency_classes:
     unserved_penalty_rank: 2
   - key: within_month
     label: U roku od mjesec dana
-    max_shift_days: 30       # REVIEW: je li 30 dana razumna gornja granica?
+    max_shift_days: 30       # PROCJENA (nije pronađen dobar izvor); poklapa se s ciljem ministarstva od najviše 30 dana čekanja
     unserved_penalty_rank: 1
 
 # Trajanje pregleda u minutama po djelatnosti i vrsti pregleda.
 # median_min: procjena iskorištenosti vozila; p90_min: prozor povratne vožnje (ARHITEKTURA §8).
 # Navedene su samo smislene kombinacije.
-# REVIEW: sva trajanja su procjene bez izvora; domenski član tima treba ih ispraviti.
+# PROCJENA (nije pronađen dobar izvor): trajanja osim dijalize; bolnice ne objavljuju trajanja termina. Uključuju čekanje u ustanovi.
 visit_durations:
   - {department: internal_medicine, visit_type: first_visit,      median_min: 45,  p90_min: 75}
   - {department: internal_medicine, visit_type: follow_up,        median_min: 25,  p90_min: 45}
@@ -94,11 +109,13 @@ visit_durations:
   - {department: radiology,         visit_type: procedure_test,   median_min: 40,  p90_min: 75}   # npr. RTG, UZV, CT
   - {department: oncology,          visit_type: first_visit,      median_min: 60,  p90_min: 100}
   - {department: oncology,          visit_type: follow_up,        median_min: 40,  p90_min: 70}
-  - {department: oncology,          visit_type: procedure_test,   median_min: 120, p90_min: 200}  # REVIEW: jako ovisi o protokolu
-  - {department: dialysis,          visit_type: dialysis_session, median_min: 240, p90_min: 270}  # REVIEW: provjeriti trajanje seanse
+  - {department: oncology,          visit_type: procedure_test,   median_min: 90,  p90_min: 150}  # PROCJENA (nije pronađen dobar izvor); onkološka obrada, npr. biopsija
+  - {department: oncology,          visit_type: chemotherapy,     median_min: 150, p90_min: 300}  # PROCJENA (nije pronađen dobar izvor); nalaz krvi + infuzija, od 1 do 6 h
+  - {department: oncology,          visit_type: radiotherapy,     median_min: 45,  p90_min: 90}   # PROCJENA (nije pronađen dobar izvor); frakcija 15-30 min + prijava i čekanje
+  - {department: dialysis,          visit_type: dialysis_session, median_min: 240, p90_min: 270}  # standard: 3x tjedno po 4 h, raspon 3-5 h (hrčak, KB Merkur)
 
 # Vrijeme ukrcaja (zaustavljanje na adresi) u minutama po klasi pokretljivosti (E4-T2).
-# REVIEW: sve vrijednosti su procjene; provjeriti sa sanitetskim vozačem.
+# PROCJENA (nije pronađen dobar izvor): studije postoje samo za gradske autobuse; procjena za ukrcaj od vrata do vozila.
 boarding_time_min:
   walks: 3
   cane: 5

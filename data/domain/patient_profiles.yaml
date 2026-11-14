@@ -12,7 +12,7 @@
 # Raspon ne smije biti veći od max_shift_days klase hitnosti.
 # social_order_today: pokretan pacijent koji bi DANAS vjerojatno dobio nalog za sanitetski prijevoz
 #   iz socijalnih razloga (plan, E1-T3); sustav ga ne šalje na sanitetsko vozilo (pravilo 7).
-# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb (REVIEW: konkretna zagrebačka bolnica je nagađanje).
+# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb (KBC Zagreb = Rebro, Kišpatićeva 12, koordinate prema OSM-u; trenutno ga nijedan demo profil ne koristi).
 # OB Gospić nema onkologiju; onkološki pregledi idu u KBC (kbc_rijeka, kbc_zagreb).
 # carpool_consent: pacijent pristaje na zajedničku vožnju (kao suputnik, ili kao vozač ako ima auto).
 # driver_documents_confirmed: sestra je provjerila vozačku, registraciju i osiguranje pacijenta-vozača.
@@ -129,7 +129,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order   # hemodijaliza: putni nalog bez obzira na udaljenost; REVIEW: štap, pravo na sanitet procjenjuje liječnik
+    expected_transport_entitlement: travel_order   # hemodijaliza: naknada bez obzira na udaljenost (mjesečni paušal + km jer je OB Gospić u drugom mjestu; Pravilnik NN 37/2026, čl. 83.). Štap: sanitet procjenjuje liječnik, sustav samo označava.
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -225,7 +225,7 @@ patients:
     companion: true
     floor: 0
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: vozi se sam; najbliža kardiologija je OB Gospić (~57 km). Putni nalog samo ako je u Rijeku upućen jer Gospić ne može
+    expected_transport_entitlement: none   # odredište KBC Rijeka nije najbliža kardiologija (OB Gospić, ~57 km); bez ručne oznake sestre nema naknade (Pravilnik NN 37/2026, čl. 76.). Vlastiti auto ne isključuje pravo.
     social_order_today: false
     own_car: true
     carpool_driver_seats: 2
@@ -321,7 +321,7 @@ patients:
     companion: true
     floor: 1
     elevator: true
-    expected_transport_entitlement: travel_order   # REVIEW: najbliža neurologija je OB Gospić (~67 km), ne Zagreb; štap: pravo na sanitet procjenjuje liječnik
+    expected_transport_entitlement: travel_order   # najbliža neurologija je OB Gospić (OSRM ~67 km s trajektom Žigljen-Prizna), ali ondje nema subspecijalističkog pregleda; najbliži KBC je Rijeka (~130 km). Putni nalog vrijedi uz ručnu oznaku sestre "bliže nema te djelatnosti" (Pravilnik NN 37/2026, čl. 75. st. 1. t. 2.); bez nje bi prijedlog bio none, kao kod p07. Štap: sanitet procjenjuje liječnik.
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -329,14 +329,14 @@ patients:
     driver_documents_confirmed: false
     missed_visits_last_year: 0
     visit:
-      destination: kbc_zagreb
+      destination: kbc_rijeka
       department: neurology
       visit_type: first_visit
       urgency_class: within_month
       earliest_offset_days: 1
       latest_offset_days: 14
       recurrence: null
-    story: "Iz Novalje sam i upućen sam na prvi subspecijalistički neurološki pregled u KBC Zagreb. Hodam uz štap, a supruga ide sa mnom kao pratnja."
+    story: "Iz Novalje sam i upućen sam na prvi subspecijalistički neurološki pregled u KBC Rijeka. Hodam uz štap, a supruga ide sa mnom kao pratnja."
 
   - key: p11
     first_name: Dragica
@@ -577,7 +577,7 @@ patients:
     companion: false
     floor: 3
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: unutar mjesta prebivališta; štap i stepenice: pravo na sanitet procjenjuje liječnik
+    expected_transport_entitlement: none   # isto mjesto pa nema putnog naloga (ZOZO čl. 62. st. 1.); sanitet i unutar mjesta moguć je ako ga liječnik odobri (Pravilnik NN 37/2026, čl. 14. st. 3.), pa sustav samo označava procjenu
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0

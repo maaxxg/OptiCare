@@ -1,31 +1,47 @@
 # Linije Lika Line kao opcija javnog prijevoza (E1-T3).
-# Lika Line je stvarna županijska mreža (23 linije u četiri zone), ali SU OVDJE TRASE I POLASCI NACRT:
-# odabrane su tri linije koje povezuju naselja iz demo profila s Gospićem.
-# REVIEW: provjeriti stvarne linije, stanice i vozni red prije nego se prikažu korisniku.
+# Stvarne linije i polasci prema službenom voznom redu na likaline.hr (preuzeto 14. 11. 2026.).
+# Izabrane su četiri linije koje povezuju naselja iz demo profila s Gospićem. Vozni red se mijenja:
+# prije prikaza korisniku usporediti s likaline.hr. Info: +385 72 660 660.
 #
 # Linija NIJE vozilo: autobus vozi fiksnom trasom po voznom redu, ne dolazi pred kuću i planer ga ne
 # raspoređuje. Služi kao informacija da pokretan pacijent može ići autobusom (uz putni nalog).
-# stops: naselja redom od polazišta prema Gospiću; povratak ide obrnutim redom.
+# stops: naselja iz demo podataka redom od polazišta prema Gospiću (međustanice su izostavljene);
+#   povratak ide obrnutim redom.
 # to_gospic: polasci s prve stanice; from_gospic: polasci iz Gospića. Vrijeme je Europe/Zagreb.
+# Navedeni su samo polasci RADNIM DANOM (weekdays_only: true). Linije 1, 2 i 3 voze i subotom,
+# a 1 i 3 i nedjeljom, ali rjeđe; ti polasci ovdje nisu prepisani.
+#
+# Naselja bez izravne linije do Gospića (presjedanje):
+# - Donji Lapac: linija 11 do Korenice (5:00 -> 5:45), pa linija 3 (Korenica 6:00 -> Gospić 7:00).
+#   Povratak: linija 3 (Gospić 15:00 -> Korenica 16:00), pa linija 11 (Korenica 16:00 -> D. Lapac 16:45).
+# - Brinje: linija 15 do Otočca (Brinje 7:02 -> Otočac 7:40), pa linija 1 (Otočac 9:45 -> Gospić 10:40).
 
 lines:
-  - key: udbina_gospic
-    label: Donji Lapac – Udbina – Gospić
-    stops: [Donji Lapac, Udbina, Gospić]
-    to_gospic: ["06:00"]
-    from_gospic: ["14:30"]
+  - key: line_1_otocac_gospic
+    label: "Linija 1: Otočac – Perušić – Lički Osik – Gospić"
+    stops: [Otočac, Perušić, Lički Osik, Gospić]
+    to_gospic: ["05:55", "06:45", "09:45", "14:10", "15:15", "18:00"]   # do Gospića za 55 min
+    from_gospic: ["06:55", "10:00", "14:10", "15:15", "17:05", "19:30"]
     weekdays_only: true
 
-  - key: brinje_gospic
-    label: Brinje – Otočac – Perušić – Gospić
-    stops: [Brinje, Otočac, Perušić, Gospić]
-    to_gospic: ["06:15", "11:00"]
-    from_gospic: ["13:00", "15:30"]
+  - key: line_23_udbina_gospic
+    label: "Linija 23: Udbina – Lovinac – Gospić"
+    stops: [Udbina, Lovinac, Gospić]
+    # 06:45 stiže u Gospić u 7:45 (utorak-petak) ili u 8:08 (ponedjeljak, preko Podlapače).
+    to_gospic: ["06:45", "13:00"]
+    from_gospic: ["11:00", "14:15"]
     weekdays_only: true
 
-  - key: lovinac_gospic
-    label: Lovinac – Gospić
-    stops: [Lovinac, Gospić]
-    to_gospic: ["06:45"]
-    from_gospic: ["14:00"]
+  - key: line_2_lovinac_gospic
+    label: "Linija 2: Lovinac – Gospić"
+    stops: [Lovinac, Gospić]   # linija vozi Gospić – Lovinac – Štikada – Gračac
+    to_gospic: ["06:40", "16:24"]
+    from_gospic: ["05:05", "14:10"]
+    weekdays_only: true
+
+  - key: line_3_korenica_gospic
+    label: "Linija 3: Korenica – Gospić"
+    stops: [Korenica, Gospić]
+    to_gospic: ["06:00", "13:00", "16:05"]   # do Gospića za oko 60 min
+    from_gospic: ["05:00", "10:50", "15:00"]
     weekdays_only: true
