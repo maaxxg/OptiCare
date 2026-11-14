@@ -18,7 +18,8 @@ export type UnservedReason =
 	| 'no_vehicle_capacity'
 	| 'max_ride_time'
 	| 'location_missing'
-	| 'solver_timeout';
+	| 'solver_timeout'
+	| 'sanitetski_order_needed';
 
 export interface GeoPoint {
 	lat: number;
