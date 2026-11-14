@@ -127,8 +127,6 @@ def generate_synthetic_trip_logs(
         )
         if floor > 0 and not elevator:
             boarding_min += floor * float(boarding_cfg["extra_min_per_floor_no_elevator"][mobility])
-        if companion:
-            boarding_min *= float(boarding_cfg["companion_factor"])
         boarding_min = max(float(boarding_cfg["min_minutes"]), round(boarding_min, 1))
 
         # 2. Visit duration at facility (check-in -> check-out)
@@ -139,8 +137,6 @@ def generate_synthetic_trip_logs(
             p90=float(dur_entry.p90_min),
             minimum=float(visit_cfg["min_minutes"]),
         )
-        if patient_age >= 75:
-            visit_min *= float(visit_cfg["age_over_75_factor"])
         visit_min = max(float(visit_cfg["min_minutes"]), round(visit_min, 1))
 
         # 3. Drive distance and travel times

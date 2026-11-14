@@ -11,7 +11,7 @@ history_days: 180            # raspon u prošlost (dani)
 random_seed: 42
 
 # Udjeli vrsta pregleda u povijesnim vožnjama (zbroj ne mora biti 1; normalizira se u kodu).
-# REVIEW: odražava li omjer tipičnu potražnju (puno dijalize i kontrola, manje prvih pregleda)?
+# REVIEW: odražava li omjer tipičnu potražnju (dijaliza 3x tjedno + kontrole čine glavninu vožnji)?
 visit_mix:
   - {department: dialysis,          visit_type: dialysis_session, weight: 22}
   - {department: internal_medicine, visit_type: follow_up,        weight: 10}
@@ -56,25 +56,23 @@ boarding:
     cane: 1.5
     wheelchair: 3.5
     stretcher: 5.0
-  companion_factor: 0.90     # pratnja malo skraćuje ukrcaj (0.90 = 10% brže)
   min_minutes: 1.0
 
-# Dodatni utjecaj dobi na trajanje pregleda u ustanovi.
-# REVIEW: stariji pacijenti u prosjeku trebaju malo više vremena pri prijemu i kretanju kroz odjel.
+# Najmanje dopušteno trajanje pregleda pri uzorkovanju (u minutama).
 visit_duration:
-  age_over_75_factor: 1.08
   min_minutes: 10.0
 
-# Demografija i zgrade za sintetičke pacijente u povijesnim vožnjama.
+# Kontekst pacijenta u povijesnim vožnjama (dob, kat, lift, pratnja).
+# U Ličko-senjskoj županiji 26-28% stanovništva ima 65+ godina (DZS Popis 2021).
 patient_context:
   age_min: 45
   age_max: 92
-  age_mode: 74               # trokutasta raspodjela s vrhom oko 74 godine
-  floor_weights:             # 0 = prizemlje/kuća (većina u Lici), 1-4 = katovi u gradu
-    0: 0.68
+  age_mode: 74
+  floor_weights:             # 0 = prizemlje/kuća (većina u Lici), 1-4 = katovi u zgradama
+    0: 0.70
     1: 0.14
-    2: 0.10
-    3: 0.06
+    2: 0.09
+    3: 0.05
     4: 0.02
   elevator_prob_if_floor_ge_2: 0.25
   companion_prob_by_mobility:
@@ -83,10 +81,12 @@ patient_context:
     wheelchair: 0.65
     stretcher: 0.80
 
-# Udaljenost u jednom smjeru (km) i prosječna brzina za izračun vremena vožnje.
+# Cestovna udaljenost u jednom smjeru (km) i prosječna brzina za izračun vremena vožnje.
+# Stvarne udaljenosti do OB Gospić: Smiljan/Lički Osik/Perušić 6-15 km, Otočac/Udbina/Korenica 45-57 km,
+# Donji Lapac 75-80 km, Novalja/Senj ~85-87 km; do KBC Rijeka / KBC Zagreb 110-215 km.
 drive:
   mean_speed_kmh: 55.0
   distance_bands_km:
-    local:     {min: 3.0,  max: 18.0,  weight: 0.35}  # Gospić i okolna naselja
-    regional:  {min: 18.0, max: 65.0,  weight: 0.50}  # Otočac, Perušić, Udbina, Senj, Korenica...
-    external:  {min: 90.0, max: 220.0, weight: 0.15}  # KBC Rijeka / KBC Zagreb (npr. onkologija)
+    local:     {min: 3.0,   max: 18.0,  weight: 0.35}  # Gospić, Smiljan, Lički Osik, Perušić
+    regional:  {min: 18.0,  max: 90.0,  weight: 0.50}  # Otočac, Udbina, Korenica, D. Lapac, Senj, Novalja
+    external:  {min: 110.0, max: 220.0, weight: 0.15}  # KBC Rijeka i KBC Zagreb (npr. onkologija)
