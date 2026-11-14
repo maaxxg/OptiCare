@@ -38,6 +38,7 @@ factors:
     rationale: Dulji put je zahtjevniji, a tolerancija na kašnjenje manja.
 
   - key: age
+    # Dob = tekuća godina − godina rođenja (dob koju pacijent navršava ove godine).
     label: Dob
     weight: 0.15              # PROCJENA (nije pronađen dobar izvor)
     unit: years
