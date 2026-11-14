@@ -19,7 +19,6 @@ from app.models import (
     Department,
     MobilityClass,
     PhoneType,
-    TransportEntitlement,
     UrgencyClass,
     VisitType,
 )
@@ -71,12 +70,10 @@ SYSTEM_PROMPT_HR = (
     "4. Dozvoljene vrijednosti šifrarnika:\n"
     '   - `mobility_class`: "walks" | "cane" | "wheelchair" | "stretcher"\n'
     '   - `phone_type`: "landline" | "basic_mobile" | "smartphone"\n'
-    '   - `transport_entitlement`: "sanitetski" | "travel_order" | "none"\n'
     '   - `department`: "internal_medicine" | "cardiology" | "ophthalmology" | "orthopaedics" | '
     '"neurology" | "radiology" | "oncology" | "dialysis"\n'
     '   - `visit_type`: "first_visit" | "follow_up" | "procedure_test" | "dialysis_session"\n'
     '   - `urgency_class`: "fixed" | "within_few_days" | "within_week" | "within_month"\n'
-    '   - `facility_key`: "ob_gospic" | "kbc_rijeka" | "kbc_zagreb"\n'
     '   - `preferred_time_of_day`: "morning" | "afternoon"\n\n'
     "PRIMJER 1:\n"
     'Ulaz: "Pacijent Ivan Kovačević (1958.), Otočac, tel +385 00 000 0002, mobitel. '
@@ -90,20 +87,17 @@ SYSTEM_PROMPT_HR = (
     '    "birth_year": 1958,\n'
     '    "phone": "+385 00 000 0002",\n'
     '    "phone_type": "basic_mobile",\n'
-    '    "address": null,\n'
     '    "settlement": "Otočac",\n'
     '    "mobility_class": "wheelchair",\n'
     '    "lives_alone": false,\n'
     '    "companion": true,\n'
     '    "floor": 0,\n'
     '    "elevator": false,\n'
-    '    "transport_entitlement": "sanitetski",\n'
     '    "own_car": false,\n'
     '    "carpool_driver_seats": 0,\n'
     '    "carpool_rider_consent": false\n'
     "  },\n"
     '  "visit_request": {\n'
-    '    "facility_key": "ob_gospic",\n'
     '    "department": "orthopaedics",\n'
     '    "visit_type": "follow_up",\n'
     '    "urgency_class": "within_week",\n'
@@ -125,20 +119,17 @@ SYSTEM_PROMPT_HR = (
     '    "birth_year": null,\n'
     '    "phone": null,\n'
     '    "phone_type": null,\n'
-    '    "address": null,\n'
     '    "settlement": "Senj",\n'
     '    "mobility_class": "stretcher",\n'
     '    "lives_alone": false,\n'
     '    "companion": null,\n'
     '    "floor": 1,\n'
     '    "elevator": false,\n'
-    '    "transport_entitlement": "sanitetski",\n'
     '    "own_car": false,\n'
     '    "carpool_driver_seats": 0,\n'
     '    "carpool_rider_consent": false\n'
     "  },\n"
     '  "visit_request": {\n'
-    '    "facility_key": "ob_gospic",\n'
     '    "department": "radiology",\n'
     '    "visit_type": "procedure_test",\n'
     '    "urgency_class": "within_few_days",\n'
@@ -518,12 +509,6 @@ def offline_extract_dict(text: str) -> dict[str, Any]:
     ):
         carpool_rider_consent = True
 
-    transport_entitlement: str | None = None
-    if mobility_class in (MobilityClass.WHEELCHAIR.value, MobilityClass.STRETCHER.value):
-        transport_entitlement = TransportEntitlement.SANITETSKI.value
-    elif "putni nalog" in norm:
-        transport_entitlement = TransportEntitlement.TRAVEL_ORDER.value
-
     department: str | None = None
     if "dijaliz" in norm or "hemodijaliz" in norm:
         department = Department.DIALYSIS.value
@@ -589,18 +574,6 @@ def offline_extract_dict(text: str) -> dict[str, Any]:
     elif any(k in norm for k in ("unutar mjesec", "ovaj mjesec", "mjesec dana")):
         urgency_class = UrgencyClass.WITHIN_MONTH.value
 
-    facility_key: str | None = None
-    if "rijek" in norm or "rijeci" in norm:
-        facility_key = "kbc_rijeka"
-    elif "zagreb" in norm or "rebro" in norm:
-        facility_key = "kbc_zagreb"
-    elif "gospic" in norm or "bolnic" in norm:
-        facility_key = "ob_gospic"
-    elif department == Department.ONCOLOGY.value:
-        facility_key = "kbc_rijeka"
-    elif department is not None:
-        facility_key = "ob_gospic"
-
     recurrence: str | None = None
     if "tri puta tjedno" in norm or "triput tjedno" in norm or "3x tjedno" in norm:
         recurrence = "3x_weekly"
@@ -620,20 +593,17 @@ def offline_extract_dict(text: str) -> dict[str, Any]:
             "birth_year": birth_year,
             "phone": phone,
             "phone_type": phone_type,
-            "address": settlement,
             "settlement": settlement,
             "mobility_class": mobility_class,
             "lives_alone": lives_alone,
             "companion": companion,
             "floor": floor,
             "elevator": elevator,
-            "transport_entitlement": transport_entitlement,
             "own_car": own_car,
             "carpool_driver_seats": carpool_driver_seats,
             "carpool_rider_consent": carpool_rider_consent,
         },
         "visit_request": {
-            "facility_key": facility_key,
             "department": department,
             "visit_type": visit_type,
             "urgency_class": urgency_class,
@@ -708,7 +678,7 @@ def extract_intake(
         patient_draft.mbo = extracted_mbo
 
     # Enrich coordinates, settlement, municipality, and county via geocoding adapter (E2-T3).
-    geo_query = patient_draft.address or patient_draft.settlement
+    geo_query = patient_draft.settlement
     geocoded = geocoding_client.geocode_address(geo_query) if geo_query else None
     if geocoded is not None:
         if patient_draft.settlement is None:

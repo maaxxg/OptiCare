@@ -71,20 +71,8 @@ SETTLEMENT_DIRECTORY: tuple[_SettlementEntry, ...] = (
         ("licki osik", "lickom osiku", "lickog osika", "53201"),
     ),
     _SettlementEntry(
-        GeocodedAddress(44.7897, 15.3175, "Ličko Lešće", "Otočac"),
-        ("licko lesce", "lickom lescu"),
-    ),
-    _SettlementEntry(
-        GeocodedAddress(44.5530, 15.3520, "Kaniža Gospićka", "Gospić"),
-        ("kaniza gospicka", "kanizi gospickoj"),
-    ),
-    _SettlementEntry(
         GeocodedAddress(44.8805, 15.6212, "Plitvička Jezera", "Plitvička Jezera"),
         ("plitvicka jezera", "plitvickim jezerima", "53231"),
-    ),
-    _SettlementEntry(
-        GeocodedAddress(44.9283, 14.9189, "Sveti Juraj", "Senj"),
-        ("sveti juraj", "svetom jurju"),
     ),
     _SettlementEntry(
         GeocodedAddress(44.82659, 15.13895, "Kuterevo", "Otočac"),
@@ -93,10 +81,6 @@ SETTLEMENT_DIRECTORY: tuple[_SettlementEntry, ...] = (
     _SettlementEntry(
         GeocodedAddress(44.56175, 15.3214, "Smiljan", "Gospić"),
         ("smiljan", "smiljanu", "smiljana"),
-    ),
-    _SettlementEntry(
-        GeocodedAddress(44.6400, 15.2500, "Pazarište", "Gospić"),
-        ("pazariste", "pazaristu"),
     ),
     _SettlementEntry(
         GeocodedAddress(44.70625, 14.89778, "Jablanac", "Senj"),

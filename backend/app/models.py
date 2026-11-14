@@ -124,14 +124,9 @@ def make_multipolygon_wkt(wkt: str) -> WKTElement:
 
 def extract_lon_lat(geom: Any) -> tuple[float, float] | None:
     """Return (lon, lat) of a Point stored as WKTElement/WKBElement, else None."""
-    if isinstance(geom, (WKTElement, WKBElement)):
-        shape = to_shape(geom)
-    elif isinstance(geom, str) and geom.strip().upper().startswith("POINT"):
-        from shapely import wkt
-
-        shape = wkt.loads(geom)
-    else:
+    if not isinstance(geom, (WKTElement, WKBElement)):
         return None
+    shape = to_shape(geom)
     if shape.geom_type != "Point":
         return None
     return float(shape.x), float(shape.y)

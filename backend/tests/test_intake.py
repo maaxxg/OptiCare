@@ -276,7 +276,6 @@ def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestCli
     assert body["patient"]["floor"] == 1
     assert body["patient"]["elevator"] is False
     assert body["patient"]["companion"] is True
-    assert body["visit_request"]["facility_key"] == "ob_gospic"
     assert body["visit_request"]["department"] == Department.RADIOLOGY.value
     assert body["visit_request"]["visit_type"] == VisitType.PROCEDURE_TEST.value
     assert body["visit_request"]["urgency_class"] == UrgencyClass.WITHIN_FEW_DAYS.value

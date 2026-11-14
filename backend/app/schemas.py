@@ -454,7 +454,6 @@ class ExtractedPatientDraft(BaseModel):
     phone: str | None = Field(default=None, min_length=3, max_length=40)
     phone_type: PhoneType | None = None
 
-    address: str | None = Field(default=None, max_length=255)
     settlement: str | None = Field(default=None, min_length=1, max_length=120)
     municipality: str | None = Field(default=None, min_length=1, max_length=120)
     county: str | None = Field(default=None, min_length=1, max_length=120)
@@ -466,13 +465,9 @@ class ExtractedPatientDraft(BaseModel):
     floor: int | None = Field(default=None, ge=-2, le=50)
     elevator: bool | None = None
 
-    transport_entitlement: TransportEntitlement | None = None
-    social_order_today: bool | None = None
-
     own_car: bool | None = None
     carpool_driver_seats: int | None = Field(default=None, ge=0, le=8)
     carpool_rider_consent: bool | None = None
-    driver_documents_confirmed: bool | None = None
 
     missed_visits_last_year: int | None = Field(default=None, ge=0)
 
@@ -483,9 +478,6 @@ class ExtractedPatientDraft(BaseModel):
 
 
 class ExtractedVisitRequestDraft(BaseModel):
-    referral_ref: str | None = Field(default=None, max_length=64)
-    facility_key: str | None = Field(default=None, max_length=64)
-    facility_id: int | None = None
     department: Department | None = None
     visit_type: VisitType | None = None
     urgency_class: UrgencyClass | None = None
