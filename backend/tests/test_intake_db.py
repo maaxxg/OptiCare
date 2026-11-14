@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Generator
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,7 +14,15 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.main import app
-from app.models import Department, Facility, Slot, make_point_wkt
+from app.models import (
+    Assignment,
+    Department,
+    Facility,
+    Slot,
+    Vehicle,
+    VisitRequest,
+    make_point_wkt,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_DB_TESTS") != "1",
@@ -259,8 +267,7 @@ def test_post_requests_generates_candidate_slots_or_sets_pending(
         slot_afternoon.id,
     ]
 
-    # 2. Urgency class FIXED (max_shift_days = 0) clamps window to earliest_date;
-    #    no slot on 2026-11-16 -> slot_request_pending=True with preferred_time_of_day
+    # 2. No slot in the window -> pending, the nurse's stated preference and dates are stored as-is
     req2 = client.post(
         "/requests",
         json={
@@ -279,9 +286,9 @@ def test_post_requests_generates_candidate_slots_or_sets_pending(
     assert r2_data["candidate_slots"] == []
     assert r2_data["slot_request_pending"] is True
     assert r2_data["preferred_time_of_day"] == "afternoon"
-    assert r2_data["latest_date"] == "2026-11-16"
+    assert r2_data["latest_date"] == "2026-11-22"
 
-    # 3. Department with no open slots and no preferred_time_of_day defaults to "morning"
+    # 3. No slot and no stated preference -> pending with preference null (never invented)
     req3 = client.post(
         "/requests",
         json={
@@ -298,4 +305,131 @@ def test_post_requests_generates_candidate_slots_or_sets_pending(
     r3_data = req3.json()
     assert r3_data["candidate_slots"] == []
     assert r3_data["slot_request_pending"] is True
-    assert r3_data["preferred_time_of_day"] == "morning"
+    assert r3_data["preferred_time_of_day"] is None
+
+
+def _facility_and_patient(client: TestClient, db: Session) -> tuple[int, int]:
+    facility = Facility(
+        key="ob_gospic",
+        name="Opća bolnica Gospić",
+        level="secondary",
+        settlement="Gospić",
+        municipality="Gospić",
+        county="Ličko-senjska",
+        location=make_point_wkt(44.5435, 15.36214),
+    )
+    db.add(facility)
+    db.commit()
+    db.refresh(facility)
+    patient = client.post(
+        "/patients",
+        json={
+            "first_name": "Mirko",
+            "last_name": "Devčić",
+            "mbo": "000000009",
+            "phone": "+385 00 000 0009",
+            "settlement": "Smiljan",
+            "municipality": "Gospić",
+            "county": "Ličko-senjska",
+        },
+    )
+    return facility.id, patient.json()["id"]
+
+
+def _slot(facility_id: int, day: date, at: time, capacity: int = 2) -> Slot:
+    start = datetime.combine(day, at, tzinfo=ZAGREB_TZ)
+    return Slot(
+        facility_id=facility_id,
+        department=Department.CARDIOLOGY.value,
+        start_time=start,
+        end_time=start + timedelta(minutes=30),
+        capacity=capacity,
+    )
+
+
+def _post_request(client: TestClient, facility_id: int, patient_id: int, **extra: object) -> dict:
+    body = {
+        "patient_id": patient_id,
+        "facility_id": facility_id,
+        "department": "cardiology",
+        "visit_type": "first_visit",
+        "urgency_class": "within_week",
+        "earliest_date": "2026-11-16",
+        "latest_date": "2026-11-22",
+        **extra,
+    }
+    resp = client.post("/requests", json=body)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def test_request_without_slot_stores_preference_as_given(client: TestClient, db: Session) -> None:
+    facility_id, patient_id = _facility_and_patient(client, db)
+    data = _post_request(client, facility_id, patient_id, preferred_time_of_day="afternoon")
+    assert data["slot_request_pending"] is True
+    assert data["preferred_time_of_day"] == "afternoon"
+
+
+def test_slot_date_bounds_use_zagreb_local_day(client: TestClient, db: Session) -> None:
+    facility_id, patient_id = _facility_and_patient(client, db)
+    late = _slot(facility_id, date(2026, 11, 22), time(23, 30))
+    next_day = _slot(facility_id, date(2026, 11, 23), time(0, 30))
+    db.add_all([late, next_day])
+    db.commit()
+    data = _post_request(client, facility_id, patient_id)
+    assert [s["id"] for s in data["candidate_slots"]] == [late.id]
+
+
+def test_full_slot_is_not_a_candidate(client: TestClient, db: Session) -> None:
+    facility_id, patient_id = _facility_and_patient(client, db)
+    full = _slot(facility_id, date(2026, 11, 17), time(8, 0), capacity=1)
+    free = _slot(facility_id, date(2026, 11, 17), time(9, 0), capacity=1)
+    db.add_all([full, free])
+    db.commit()
+    first = _post_request(client, facility_id, patient_id)
+    vehicle = Vehicle(
+        key="v1",
+        provider_type="sanitetski",
+        seats=3,
+        base_location=make_point_wkt(44.5435, 15.36214),
+    )
+    db.add(vehicle)
+    db.commit()
+    db.add(
+        Assignment(
+            request_id=first["id"],
+            slot_id=full.id,
+            vehicle_id=vehicle.id,
+            pickup_time=datetime(2026, 11, 17, 7, 0, tzinfo=ZAGREB_TZ),
+        )
+    )
+    db.commit()
+    data = _post_request(client, facility_id, patient_id)
+    assert [s["id"] for s in data["candidate_slots"]] == [free.id]
+
+
+def test_latest_date_is_stored_as_entered_urgency_window_only_narrows_search(
+    client: TestClient, db: Session
+) -> None:
+    facility_id, patient_id = _facility_and_patient(client, db)
+    inside = _slot(facility_id, date(2026, 11, 20), time(8, 0))
+    outside = _slot(facility_id, date(2026, 11, 25), time(8, 0))
+    db.add_all([inside, outside])
+    db.commit()
+
+    data = _post_request(client, facility_id, patient_id, latest_date="2026-11-30")
+    assert data["latest_date"] == "2026-11-30"
+    assert [s["id"] for s in data["candidate_slots"]] == [inside.id]
+    row = db.get(VisitRequest, data["id"])
+    assert row is not None
+    assert row.latest_date == date(2026, 11, 30)
+
+    # Explicit candidate ids are narrowed by the same window.
+    explicit = _post_request(
+        client,
+        facility_id,
+        patient_id,
+        latest_date="2026-11-30",
+        candidate_slot_ids=[inside.id, outside.id],
+    )
+    assert [s["id"] for s in explicit["candidate_slots"]] == [inside.id]

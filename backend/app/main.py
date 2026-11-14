@@ -1,7 +1,7 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import Annotated
 from zoneinfo import ZoneInfo
@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from sqlalchemy import Connection, select, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.adapters import get_geocoding_client, get_llm_client
 from app.adapters.geocoding import GeocodingClient, _normalize
@@ -257,22 +257,42 @@ def create_or_update_patient(
     return patient
 
 
-def _slot_local_dt(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=ZAGREB_TZ)
-    return dt.astimezone(ZAGREB_TZ)
-
-
 def _matches_time_of_day(dt: datetime, preferred: str | None) -> bool:
     if not preferred:
         return True
-    hour = _slot_local_dt(dt).hour
-    pref = preferred.strip().lower()
-    if pref in ("morning", "ujutro", "prijepodne"):
+    hour = dt.astimezone(ZAGREB_TZ).hour
+    if preferred == "morning":
         return hour < 12
-    if pref in ("afternoon", "popodne", "poslijepodne"):
+    if preferred == "afternoon":
         return hour >= 12
     return True
+
+
+def _open_slots_in_range(
+    db: Session,
+    facility_id: int,
+    department: str,
+    earliest_date: date,
+    latest_date: date,
+    slot_ids: list[int] | None = None,
+) -> list[Slot]:
+    """Slots of the facility+department between the dates (Europe/Zagreb, inclusive) with room."""
+    start = datetime.combine(earliest_date, time.min, tzinfo=ZAGREB_TZ)
+    end = datetime.combine(latest_date + timedelta(days=1), time.min, tzinfo=ZAGREB_TZ)
+    stmt = (
+        select(Slot)
+        .where(
+            Slot.facility_id == facility_id,
+            Slot.department == department,
+            Slot.start_time >= start,
+            Slot.start_time < end,
+        )
+        .options(selectinload(Slot.assignments))
+        .order_by(Slot.start_time)
+    )
+    if slot_ids is not None:
+        stmt = stmt.where(Slot.id.in_(slot_ids))
+    return [s for s in db.scalars(stmt).all() if len(s.assignments) < s.capacity]
 
 
 def find_candidate_slots(
@@ -283,23 +303,9 @@ def find_candidate_slots(
     latest_date: date,
     preferred_time_of_day: str | None = None,
 ) -> list[Slot]:
-    stmt = (
-        select(Slot)
-        .where(Slot.facility_id == facility_id, Slot.department == department)
-        .order_by(Slot.start_time)
-    )
-    all_slots = list(db.scalars(stmt).all())
-    in_window = [
-        s
-        for s in all_slots
-        if earliest_date <= _slot_local_dt(s.start_time).date() <= latest_date
-        and len(s.assignments) < s.capacity
-    ]
+    in_window = _open_slots_in_range(db, facility_id, department, earliest_date, latest_date)
     if preferred_time_of_day:
-        preferred_matches = [
-            s for s in in_window if _matches_time_of_day(s.start_time, preferred_time_of_day)
-        ]
-        return preferred_matches
+        return [s for s in in_window if _matches_time_of_day(s.start_time, preferred_time_of_day)]
     return in_window
 
 
@@ -328,41 +334,29 @@ def create_visit_request(
         )
 
     max_shift_days = get_urgency_max_shift_days(payload.urgency_class)
-    urgency_latest = payload.earliest_date + timedelta(days=max_shift_days)
-    effective_latest = min(payload.latest_date, urgency_latest)
+    # The urgency window only narrows the slot search; the nurse's dates are stored as entered.
+    search_latest = min(payload.latest_date, payload.earliest_date + timedelta(days=max_shift_days))
 
     if payload.candidate_slot_ids:
-        stmt = (
-            select(Slot)
-            .where(
-                Slot.id.in_(payload.candidate_slot_ids),
-                Slot.facility_id == payload.facility_id,
-                Slot.department == payload.department.value,
-            )
-            .order_by(Slot.start_time)
+        candidates = _open_slots_in_range(
+            db,
+            payload.facility_id,
+            payload.department.value,
+            payload.earliest_date,
+            search_latest,
+            slot_ids=payload.candidate_slot_ids,
         )
-        candidates = [
-            s
-            for s in db.scalars(stmt).all()
-            if payload.earliest_date <= _slot_local_dt(s.start_time).date() <= effective_latest
-            and len(s.assignments) < s.capacity
-        ]
     else:
         candidates = find_candidate_slots(
             db=db,
             facility_id=payload.facility_id,
             department=payload.department.value,
             earliest_date=payload.earliest_date,
-            latest_date=effective_latest,
+            latest_date=search_latest,
             preferred_time_of_day=payload.preferred_time_of_day,
         )
 
-    if candidates:
-        slot_request_pending = False
-        preferred_time_of_day = payload.preferred_time_of_day
-    else:
-        slot_request_pending = True
-        preferred_time_of_day = payload.preferred_time_of_day or "morning"
+    slot_request_pending = not candidates
 
     visit_request = VisitRequest(
         patient_id=payload.patient_id,
@@ -372,9 +366,9 @@ def create_visit_request(
         visit_type=payload.visit_type.value,
         urgency_class=payload.urgency_class.value,
         earliest_date=payload.earliest_date,
-        latest_date=effective_latest,
+        latest_date=payload.latest_date,
         recurrence=payload.recurrence,
-        preferred_time_of_day=preferred_time_of_day,
+        preferred_time_of_day=payload.preferred_time_of_day,
         slot_request_pending=slot_request_pending,
         status=payload.status.value,
         candidate_slots=candidates,

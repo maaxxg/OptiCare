@@ -393,6 +393,22 @@ def test_schema_validation_errors() -> None:
         )
 
 
+def test_preferred_time_of_day_accepts_only_codebook_values() -> None:
+    kw = dict(
+        patient_id=1,
+        facility_id=1,
+        department=Department.CARDIOLOGY,
+        visit_type=VisitType.FOLLOW_UP,
+        urgency_class=UrgencyClass.WITHIN_WEEK,
+        earliest_date=date(2026, 11, 16),
+        latest_date=date(2026, 11, 20),
+    )
+    assert VisitRequestCreate(**kw).preferred_time_of_day is None
+    assert VisitRequestCreate(**kw, preferred_time_of_day="afternoon").preferred_time_of_day
+    with pytest.raises(ValidationError, match="Željeni dio dana"):
+        VisitRequestCreate(**kw, preferred_time_of_day="ujutro")
+
+
 _PATIENT_KW = dict(
     first_name="Ivo",
     last_name="Ivić",

@@ -300,6 +300,17 @@ class SlotRead(SlotBase):
 # ---------------------------------------------------------------------------
 
 
+TIMES_OF_DAY = ("morning", "afternoon")
+
+
+def _validate_time_of_day(value: str | None) -> str | None:
+    if value is not None and value not in TIMES_OF_DAY:
+        raise PydanticCustomError(
+            "time_of_day", "Željeni dio dana mora biti prijepodne ili poslijepodne."
+        )
+    return value
+
+
 class VisitRequestBase(BaseModel):
     patient_id: int
     referral_ref: str | None = Field(default=None, max_length=64)
@@ -313,6 +324,8 @@ class VisitRequestBase(BaseModel):
     preferred_time_of_day: str | None = Field(default=None, max_length=32)
     slot_request_pending: bool = False
     status: RequestStatus = Field(default=RequestStatus.OPEN)
+
+    _check_time_of_day = field_validator("preferred_time_of_day")(_validate_time_of_day)
 
     @model_validator(mode="after")
     def _check_dates(self) -> VisitRequestBase:
@@ -518,6 +531,8 @@ class ExtractedVisitRequestDraft(BaseModel):
     latest_date: date | None = None
     recurrence: str | None = Field(default=None, max_length=64)
     preferred_time_of_day: str | None = Field(default=None, max_length=32)
+
+    _check_time_of_day = field_validator("preferred_time_of_day")(_validate_time_of_day)
 
 
 class IntakeExtractRequest(BaseModel):

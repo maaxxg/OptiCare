@@ -375,6 +375,22 @@ def test_extract_intake_rejects_invalid_llm_enums_into_for_review() -> None:
     assert "latest_date" in result.for_review
 
 
+def test_extract_intake_rejects_unknown_time_of_day_into_for_review() -> None:
+    llm_json = json.dumps(
+        {
+            "patient": {"first_name": "Josip", "last_name": "Marić"},
+            "visit_request": {"department": "cardiology", "preferred_time_of_day": "ujutro"},
+        }
+    )
+    result = extract_intake(
+        text="Josip Marić treba kardiologa ujutro.",
+        llm_client=MockLLMClient(response=llm_json),
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert result.visit_request.preferred_time_of_day is None
+    assert "preferred_time_of_day" in result.for_review
+
+
 # ---------------------------------------------------------------------------
 # E2-T3 (KAN-20): Address geocoding
 # ---------------------------------------------------------------------------
