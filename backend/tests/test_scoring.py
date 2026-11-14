@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -111,12 +112,12 @@ def test_resolve_factor_mapping_wheelchair(config: ScoringConfig) -> None:
 
 def test_resolve_factor_mapping_unknown_key(config: ScoringConfig) -> None:
     mobility_factor = next(f for f in config.factors if f.key == "mobility_class")
-    assert _resolve_factor(mobility_factor, "jetpack") == 0.0
+    assert _resolve_factor(mobility_factor, "jetpack") is None
 
 
 def test_resolve_factor_none_input(config: ScoringConfig) -> None:
     distance_factor = next(f for f in config.factors if f.key == "distance_to_destination")
-    assert _resolve_factor(distance_factor, None) == 0.0
+    assert _resolve_factor(distance_factor, None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +232,10 @@ def test_compute_score_p02_ivan_wheelchair(config: ScoringConfig) -> None:
 
 
 def test_compute_score_no_distance(config: ScoringConfig) -> None:
-    """Kad distance_km nije poznat, faktor udaljenosti doprinosi 0."""
+    """Kad distance_km nije poznat, faktor je označen kao nedostajući.
+
+    Ne doprinosi zbroju poznatih bodova.
+    """
     result = compute_score(
         patient_id=99,
         mobility_class="walks",
@@ -247,6 +251,10 @@ def test_compute_score_no_distance(config: ScoringConfig) -> None:
     dist_factor = next(f for f in result.factors if f.key == "distance_to_destination")
     assert dist_factor.raw_value == 0.0
     assert dist_factor.weighted_value == 0.0
+    assert dist_factor.missing is True
+    assert dist_factor.input_value is None
+    assert result.missing_factors == ["distance_to_destination"]
+    assert result.total_score_upper > result.total_score
 
 
 def test_compute_score_contributions_sum_to_total(config: ScoringConfig) -> None:
@@ -403,3 +411,93 @@ def test_score_endpoint_returns_croatian_error_on_bad_config(monkeypatch) -> Non
         app.dependency_overrides.pop(get_db, None)
     assert response.status_code == 500
     assert response.json()["detail"].startswith("Bodovanje trenutačno nije dostupno")
+
+
+# ---------------------------------------------------------------------------
+# Nedostajući ulazi: označavaju se i nikad ne snižavaju razinu (pravilo 1)
+# ---------------------------------------------------------------------------
+
+_LEVEL_ORDER = ["low", "medium", "high"]
+_REF = date(2026, 11, 14)
+
+
+def _score(config: ScoringConfig, **overrides: Any) -> ScoringResult:
+    args: dict[str, Any] = {
+        "patient_id": 1,
+        "mobility_class": "wheelchair",
+        "distance_km": 150.0,
+        "birth_year": 1938,
+        "lives_alone": True,
+        "missed_visits_last_year": 0,
+        "phone_type": "landline",
+        "companion_available": False,
+        "config": config,
+        "reference_date": _REF,
+    }
+    args.update(overrides)
+    return compute_score(**args)
+
+
+def test_compute_score_88_year_old_missing_inputs_not_lowered(config: ScoringConfig) -> None:
+    complete = _score(config)
+    partial = _score(config, birth_year=None, distance_km=None)
+    assert partial.missing_factors == ["distance_to_destination", "age"]
+    assert complete.missing_factors == []
+    assert complete.total_score_upper == complete.total_score
+    assert _LEVEL_ORDER.index(partial.level_key) >= _LEVEL_ORDER.index(complete.level_key)
+    assert partial.level_key == "high"
+    assert partial.total_score < partial.total_score_upper
+    assert abs(sum(f.weighted_value for f in partial.factors) - partial.total_score) < 0.001
+
+
+def test_missing_factor_level_never_below_any_concrete_value(config: ScoringConfig) -> None:
+    fill_values: dict[str, tuple[str, list[Any]]] = {
+        "mobility_class": ("mobility_class", ["walks", "cane", "wheelchair", "stretcher"]),
+        "distance_to_destination": ("distance_km", [0.0, 20.0, 50.0, 100.0, 300.0]),
+        "age": ("birth_year", [2000, 1961, 1951, 1941, 1900]),
+        "lives_alone": ("lives_alone", [True, False]),
+        "missed_visits_last_year": ("missed_visits_last_year", [0, 1, 2, 9]),
+        "phone_type": ("phone_type", ["smartphone", "basic_mobile", "landline"]),
+        "companion_available": ("companion_available", [True, False]),
+    }
+    base: dict[str, Any] = {
+        "mobility_class": "cane",
+        "distance_km": 30.0,
+        "birth_year": 1960,
+        "lives_alone": False,
+        "missed_visits_last_year": 0,
+        "phone_type": "basic_mobile",
+        "companion_available": True,
+    }
+    for factor_key, (arg, values) in fill_values.items():
+        missing = _score(config, **{**base, arg: None})
+        assert missing.missing_factors == [factor_key]
+        for value in values:
+            filled = _score(config, **{**base, arg: value})
+            assert _LEVEL_ORDER.index(missing.level_key) >= _LEVEL_ORDER.index(filled.level_key)
+            assert missing.total_score_upper >= filled.total_score
+
+
+def test_boolean_string_false_is_missing_not_true(config: ScoringConfig) -> None:
+    result = _score(config, lives_alone="false")
+    factor = next(f for f in result.factors if f.key == "lives_alone")
+    assert factor.missing is True
+    assert factor.raw_value == 0.0
+    assert "lives_alone" in result.missing_factors
+
+
+def test_unknown_mobility_class_is_missing(config: ScoringConfig) -> None:
+    result = _score(config, mobility_class="jetpack")
+    assert result.missing_factors == ["mobility_class"]
+
+
+def test_age_edges(config: ScoringConfig) -> None:
+    age_factor = next(f for f in config.factors if f.key == "age")
+    ref = date(2026, 1, 1)
+    assert _patient_age(1961, ref) == 65
+    assert _resolve_factor(age_factor, 65) == 0.4
+    assert _patient_age(1951, ref) == 75
+    assert _resolve_factor(age_factor, 75) == 0.7
+    assert _patient_age(2027, ref) is None
+    result = _score(config, birth_year=2027)
+    assert "age" in result.missing_factors

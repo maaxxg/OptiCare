@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date
+from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -26,6 +27,8 @@ from app.models import MobilityClass, PhoneType
 SCORING_RELATIVE_PATH = Path("domain") / "scoring_factors.yaml"
 
 logger = logging.getLogger(__name__)
+
+ZAGREB = ZoneInfo("Europe/Zagreb")
 
 KNOWN_FACTOR_KEYS = frozenset(
     {
@@ -214,13 +217,32 @@ class FactorContribution(BaseModel):
         default=None,
         description="Ulazna vrijednost iz podataka pacijenta (za transparentnost)",
     )
+    missing: bool = Field(
+        default=False,
+        description="Ulaz nedostaje ili je nevaljan; raw_value i weighted_value su tada 0",
+    )
 
 
 class ScoringResult(BaseModel):
     """Ukupni rezultat bodovanja za jednog pacijenta."""
 
     patient_id: int
-    total_score: float = Field(..., ge=0.0, le=1.0, description="Zbroj svih weighted_value")
+    total_score: float = Field(
+        ..., ge=0.0, le=1.0, description="Zbroj weighted_value poznatih faktora"
+    )
+    total_score_upper: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "total_score + najveći mogući doprinos faktora koji nedostaju; "
+            "razina se bira prema ovoj vrijednosti"
+        ),
+    )
+    missing_factors: list[str] = Field(
+        default_factory=list,
+        description="Ključevi faktora čiji ulaz nedostaje (redom iz konfiguracije)",
+    )
     level_key: str
     level_label: str
     adds_help: list[str] = Field(default_factory=list)
@@ -241,29 +263,45 @@ def _resolve_bands(bands: list[BandEntry], value: float) -> float:
     return bands[-1].value
 
 
-def _resolve_factor(factor: FactorConfig, raw_input: Any) -> float:
-    """Vrati sirovu vrijednost faktora (0–1) za danu ulaznu vrijednost."""
-    if raw_input is None:
-        return 0.0
+def _resolve_factor(factor: FactorConfig, raw_input: Any) -> float | None:
+    """Vrati sirovu vrijednost faktora (0–1) ili None ako ulaz nedostaje/nije valjan.
 
-    # Logički faktor
+    Nedostajući ulaz se nikad ne pogađa; pozivatelj ga označava kao ``missing``.
+    """
+    if raw_input is None:
+        return None
+
+    # Logički faktor: samo pravi bool, bez istinitosti ("false" nije bool)
     if factor.if_true is not None and factor.if_false is not None:
+        if not isinstance(raw_input, bool):
+            return None
         return factor.if_true if raw_input else factor.if_false
 
     # Diskretna tablica (mapping)
     if factor.mapping is not None:
-        str_val = str(raw_input).lower()
-        return factor.mapping.get(str_val, 0.0)
+        if not isinstance(raw_input, str):
+            return None
+        return factor.mapping.get(raw_input.lower())
 
     # Numerički pojasevi
     if factor.bands is not None:
-        try:
-            numeric = float(raw_input)
-        except (TypeError, ValueError):
-            return 0.0
-        return _resolve_bands(factor.bands, numeric)
+        if isinstance(raw_input, bool) or not isinstance(raw_input, int | float):
+            return None
+        if not math.isfinite(raw_input) or raw_input < 0:
+            return None
+        return _resolve_bands(factor.bands, float(raw_input))
 
-    return 0.0
+    return None
+
+
+def _max_raw_value(factor: FactorConfig) -> float:
+    """Najveća moguća sirova vrijednost faktora."""
+    if factor.bands is not None:
+        return max(b.value for b in factor.bands)
+    if factor.mapping is not None:
+        return max(factor.mapping.values())
+    assert factor.if_true is not None and factor.if_false is not None
+    return max(factor.if_true, factor.if_false)
 
 
 def _determine_level(config: ScoringConfig, score: float) -> LevelConfig:
@@ -275,11 +313,19 @@ def _determine_level(config: ScoringConfig, score: float) -> LevelConfig:
 
 
 def _patient_age(birth_year: int | None, reference_date: date | None = None) -> int | None:
-    """Vrati dob pacijenta u cijelim godinama, ili None ako birth_year nedostaje."""
-    if birth_year is None:
+    """Vrati dob pacijenta, ili None ako birth_year nedostaje ili je u budućnosti.
+
+    Pohranjena je samo godina rođenja pa je dob = referentna godina − godina
+    rođenja, tj. dob koju pacijent navršava u tekućoj kalendarskoj godini. To
+    može biti do godinu dana više od točne dobi, pa se greška uvijek javlja u
+    smjeru veće pomoći (pravilo 1). Zadani referentni datum je današnji datum
+    u vremenskoj zoni Europe/Zagreb.
+    """
+    if birth_year is None or isinstance(birth_year, bool):
         return None
-    ref = reference_date or date.today()
-    return ref.year - birth_year
+    ref = reference_date or datetime.now(ZAGREB).date()
+    age = ref.year - birth_year
+    return age if age >= 0 else None
 
 
 def compute_score(
@@ -298,11 +344,15 @@ def compute_score(
     """Izračunaj bodove potrebne za podršku za jednog pacijenta.
 
     Parametri odgovaraju stupcima u tablici ``patients`` i zahtjevu koji se
-    boduje.  ``distance_km`` dolazi iz adaptera za rute; ako nedostaje, faktor
-    udaljenosti doprinosi 0.
+    boduje.  Ulaz koji nedostaje (npr. ``distance_km``, ``birth_year``) ne
+    pogađa se: faktor je označen ``missing`` i doprinosi 0 u ``total_score``,
+    a razina se bira prema ``total_score_upper`` (poznati bodovi plus najveći
+    mogući doprinos faktora koji nedostaju), pa nedostajući podatak nikad ne
+    snižava razinu pomoći.
     """
     cfg = config or get_scoring_config()
-    age = _patient_age(birth_year, reference_date)
+    ref = reference_date or datetime.now(ZAGREB).date()
+    age = _patient_age(birth_year, ref)
 
     # Mapiranje ključeva faktora → ulaznih vrijednosti pacijenta
     inputs: dict[str, Any] = {
@@ -317,13 +367,20 @@ def compute_score(
 
     assert set(inputs) == KNOWN_FACTOR_KEYS
     contributions: list[FactorContribution] = []
+    missing_factors: list[str] = []
     total = 0.0
+    upper_extra = 0.0
 
     for factor in cfg.factors:
         raw_input = inputs.get(factor.key)
-        raw_value = _resolve_factor(factor, raw_input)
+        resolved = _resolve_factor(factor, raw_input)
+        is_missing = resolved is None
+        raw_value = 0.0 if resolved is None else resolved
         weighted = round(factor.weight * raw_value, 6)
         total += weighted
+        if is_missing:
+            missing_factors.append(factor.key)
+            upper_extra += factor.weight * _max_raw_value(factor)
         contributions.append(
             FactorContribution(
                 key=factor.key,
@@ -332,17 +389,21 @@ def compute_score(
                 raw_value=raw_value,
                 weighted_value=weighted,
                 rationale=factor.rationale,
-                input_value=raw_input,
+                input_value=None if is_missing else raw_input,
+                missing=is_missing,
             )
         )
 
     # Težine se validiraju na zbroj 1; min() štiti samo od float šuma.
     total = round(min(total, 1.0), 4)
-    level = _determine_level(cfg, total)
+    upper = round(min(total + upper_extra, 1.0), 4)
+    level = _determine_level(cfg, upper)
 
     return ScoringResult(
         patient_id=patient_id,
         total_score=total,
+        total_score_upper=upper,
+        missing_factors=missing_factors,
         level_key=level.key,
         level_label=level.label,
         adds_help=level.adds_help,
