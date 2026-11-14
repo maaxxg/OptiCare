@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root: backend/app/config.py -> parents[2]
@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     data_dir: Path = REPO_ROOT / "data"
 
     check_db_on_startup: bool = True
+
+    # Planner (E5). Minutes unless the name says seconds.
+    planner_time_limit_s: int = Field(15, ge=1)
+    planner_arrival_buffer_min: int = Field(15, ge=0)
+    planner_max_early_arrival_min: int = Field(60, ge=0)
+    # Max ride time = direct travel time + this.
+    planner_max_ride_extra_min: int = Field(45, ge=0)
+    planner_max_return_wait_min: int = Field(60, ge=0)
+    planner_pinned_time_tolerance_min: int = Field(0, ge=0)
 
 
 @lru_cache
