@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -29,6 +30,7 @@ from app.scoring import (
     _resolve_factor,
     compute_score,
     load_scoring_config,
+    road_distance_km,
 )
 
 # ---------------------------------------------------------------------------
@@ -501,3 +503,97 @@ def test_age_edges(config: ScoringConfig) -> None:
     assert _patient_age(2027, ref) is None
     result = _score(config, birth_year=2027)
     assert "age" in result.missing_factors
+
+
+# ---------------------------------------------------------------------------
+# Udaljenost preko adaptera za rute (GET /score/{id}?request_id=)
+# ---------------------------------------------------------------------------
+
+
+class _FakeDb:
+    def __init__(self, objects: dict[Any, Any]) -> None:
+        self._objects = objects
+
+    def get(self, model: type, key: int) -> Any:
+        return self._objects.get((model, key))
+
+
+def _fake_patient(lat: float | None, lon: float | None) -> Any:
+    return SimpleNamespace(
+        id=1,
+        mobility_class="walks",
+        birth_year=1970,
+        lives_alone=False,
+        missed_visits_last_year=0,
+        phone_type="mobile",
+        companion=True,
+        latitude=lat,
+        longitude=lon,
+    )
+
+
+def _score_with(objects: dict[Any, Any], url: str) -> Any:
+    app.dependency_overrides[get_db] = lambda: _FakeDb(objects)
+    try:
+        return TestClient(app).get(url)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def _request(patient_id: int, facility_lat: float | None, facility_lon: float | None) -> Any:
+    facility = SimpleNamespace(latitude=facility_lat, longitude=facility_lon)
+    return SimpleNamespace(patient_id=patient_id, facility=facility)
+
+
+def test_score_endpoint_uses_routing_distance_for_request() -> None:
+    from app.main import Patient, VisitRequest
+
+    # Gospić -> Zagreb: oko 150 km zračno, dakle gornji pojas udaljenosti.
+    objects = {
+        (Patient, 1): _fake_patient(44.55, 15.37),
+        (VisitRequest, 5): _request(1, 45.81, 15.98),
+    }
+    response = _score_with(objects, "/score/1?request_id=5")
+    assert response.status_code == 200
+    body = response.json()
+    assert "distance_to_destination" not in body["missing_factors"]
+    factor = next(f for f in body["factors"] if f["key"] == "distance_to_destination")
+    assert factor["input_value"] > 100
+    assert factor["raw_value"] == 1.0
+
+
+def test_score_endpoint_flags_distance_missing_without_request_or_location() -> None:
+    from app.main import Patient, VisitRequest
+
+    objects = {
+        (Patient, 1): _fake_patient(None, None),
+        (VisitRequest, 5): _request(1, 45.81, 15.98),
+    }
+    for url in ("/score/1", "/score/1?request_id=5"):
+        response = _score_with(objects, url)
+        assert response.status_code == 200
+        assert "distance_to_destination" in response.json()["missing_factors"]
+
+
+def test_score_endpoint_rejects_foreign_or_unknown_request_id() -> None:
+    from app.main import Patient, VisitRequest
+
+    objects = {
+        (Patient, 1): _fake_patient(44.55, 15.37),
+        (VisitRequest, 5): _request(2, 45.81, 15.98),
+    }
+    for url in ("/score/1?request_id=5", "/score/1?request_id=99"):
+        response = _score_with(objects, url)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Zahtjev nije pronađen."
+
+
+def test_road_distance_is_unknown_when_adapter_fails() -> None:
+    from app.adapters.types import AdapterError
+
+    class _Broken:
+        def matrix(self, points: Any) -> Any:
+            raise AdapterError("down")
+
+    facility = SimpleNamespace(latitude=45.81, longitude=15.98)
+    assert road_distance_km(_fake_patient(44.55, 15.37), facility, _Broken()) is None  # type: ignore[arg-type]

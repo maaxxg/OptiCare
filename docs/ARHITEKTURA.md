@@ -232,7 +232,7 @@ FastAPI backend ima jednu skupinu krajnjih točaka po modulu.
 | --- | --- | --- |
 | Unos | `POST /intake/extract` | Slobodni tekst ili transkript u strukturirani zapis |
 | Unos | `POST /patients`, `POST /requests` | Spremanje potvrđenog zapisa |
-| Bodovanje | `GET /score/{patient_id}` | Potreba za podrškom s doprinosima faktora |
+| Bodovanje | `GET /score/{patient_id}?request_id=` | Potreba za podrškom s doprinosima faktora; neobavezni `request_id` daje udaljenost do ustanove zahtjeva preko adaptera za rute, bez njega je udaljenost nepoznata (označena) |
 | ML | `POST /predict/{slot}` | Predikcija registriranog prediktora za to mjesto |
 | ML | `GET /models` | Aktivna implementacija i verzija po mjestu |
 | Planer | `POST /plan/solve?date=` | Rješavanje i povrat predloženih dodjela |

@@ -7,11 +7,18 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.adapters import get_routing_client
 from app.codebooks import Codebooks, get_codebooks
 from app.config import get_settings
 from app.db import get_db
-from app.models import Patient
-from app.scoring import ScoringConfigError, ScoringResult, compute_score, get_scoring_config
+from app.models import Patient, VisitRequest
+from app.scoring import (
+    ScoringConfigError,
+    ScoringResult,
+    compute_score,
+    get_scoring_config,
+    road_distance_km,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -77,14 +84,15 @@ def read_codebooks() -> Codebooks:
 @app.get("/score/{patient_id}", response_model=ScoringResult)
 def get_patient_score(
     patient_id: int,
-    distance_km: float | None = None,
+    request_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> ScoringResult:
     """Izračunaj bodove potrebne za podršku za pacijenta.
 
-    ``distance_km`` je opcionalan query parametar; u produkciji ga popunjava
-    adapter za rute na temelju adrese pacijenta i odredišta.  Ako se ne
-    proslijedi, faktor udaljenosti doprinosi 0.
+    Udaljenost se ne prima od pozivatelja. Ako je zadan ``request_id``, cestovna
+    udaljenost od adrese pacijenta do ustanove tog zahtjeva dolazi iz adaptera za
+    rute. Bez ``request_id``, bez lokacije ili uz grešku adaptera udaljenost je
+    nepoznata i označava se kao nedostajući ulaz (nikad se ne pogađa).
     """
     try:
         config = get_scoring_config()
@@ -101,6 +109,13 @@ def get_patient_score(
     patient = db.get(Patient, patient_id)
     if patient is None:
         raise HTTPException(status_code=404, detail="Pacijent nije pronađen.")
+
+    distance_km: float | None = None
+    if request_id is not None:
+        visit_request = db.get(VisitRequest, request_id)
+        if visit_request is None or visit_request.patient_id != patient.id:
+            raise HTTPException(status_code=404, detail="Zahtjev nije pronađen.")
+        distance_km = road_distance_km(patient, visit_request.facility, get_routing_client())
 
     return compute_score(
         patient_id=patient.id,
