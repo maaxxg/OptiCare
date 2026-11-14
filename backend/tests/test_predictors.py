@@ -359,3 +359,20 @@ def test_http_endpoints_via_testclient() -> None:
     res_422 = client.post("/predict/service_time", json={})
     assert res_422.status_code == 422
     assert "Nedostaje obvezna značajka" in res_422.json()["detail"]
+
+
+def test_planner_estimates_seam_uses_predictor_registry() -> None:
+    from app.codebooks import CodebookError
+    from app.plan_schemas import EstimateSource
+    from app.planner.estimates import boarding_minutes, visit_duration
+
+    get_predictor_registry.cache_clear()
+    est = visit_duration("cardiology", "first_visit")
+    assert est.minutes == 80
+    assert est.source == EstimateSource.RULES
+    assert est.version == "1.0"
+
+    assert boarding_minutes("wheelchair") == 10
+
+    with pytest.raises(CodebookError):
+        visit_duration("dialysis", "first_visit")

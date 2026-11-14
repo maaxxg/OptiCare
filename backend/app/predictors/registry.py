@@ -233,6 +233,7 @@ class FallbackPredictor:
 
     def _warn_fallback(self, reason: str, version: str) -> None:
         self.fallback_active = True
+        logger.disabled = False
         # Pravilo 12: bilježi (slot, razlog, verzija); nikad ne zapisuje ulazne značajke.
         logger.warning(
             "Povratak prediktora na pravilo: slot=%s razlog=%s verzija=%s",
@@ -391,6 +392,7 @@ class PredictorRegistry:
                 )
             except Exception as exc:
                 reason = f"model_load_failed:{type(exc).__name__}"
+                logger.disabled = False
                 logger.warning(
                     "Povratak prediktora na pravilo pri učitavanju: slot=%s razlog=%s verzija=%s",
                     slot,
