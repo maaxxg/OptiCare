@@ -19,7 +19,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.adapters.routing import RoutingClient
 from app.adapters.types import AdapterError, LatLon
@@ -61,11 +61,15 @@ class ScoringConfigError(Exception):
 
 
 class BandEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     max: float | None = None
     value: float = Field(..., ge=0.0, le=1.0)
 
 
 class FactorConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     key: str
     label: str
     weight: float = Field(..., ge=0.0, le=1.0)
@@ -118,14 +122,18 @@ class FactorConfig(BaseModel):
 
 
 class LevelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     key: str
     label: str
     min_score: float
     max_score: float
-    adds_help: list[str] = Field(default_factory=list)
+    adds_help: list[str]
 
 
 class ScoringConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     factors: list[FactorConfig]
     levels: list[LevelConfig]
 
@@ -430,7 +438,7 @@ def road_distance_km(
     try:
         matrix = client.matrix([LatLon(p_lat, p_lon), LatLon(f_lat, f_lon)])
         km = matrix.distances_m[0][1] / 1000
-    except AdapterError:
+    except (AdapterError, IndexError, TypeError, ValueError):
         logger.warning("Routing failed for patient_id=%s", patient.id)
         return None
     if not math.isfinite(km) or km < 0:

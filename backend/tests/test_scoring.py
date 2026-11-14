@@ -365,6 +365,19 @@ def _missing_stretcher(d: dict) -> None:
     del _factor(d, "mobility_class")["mapping"]["stretcher"]
 
 
+def _level_typo(d: dict) -> None:
+    level = d["levels"][0]
+    level["add_help"] = level.pop("adds_help")
+
+
+def _factor_extra_key(d: dict) -> None:
+    _factor(d, "age")["wieght"] = 0.1
+
+
+def _band_extra_key(d: dict) -> None:
+    _factor(d, "age")["bands"][0]["vlaue"] = 0.1
+
+
 def _empty_levels(d: dict) -> None:
     d["levels"] = []
 
@@ -392,6 +405,9 @@ def _last_level_too_low(d: dict) -> None:
         _empty_levels,
         _level_gap,
         _last_level_too_low,
+        _level_typo,
+        _factor_extra_key,
+        _band_extra_key,
     ],
 )
 def test_invalid_scoring_config_is_rejected(mutate, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -597,3 +613,15 @@ def test_road_distance_is_unknown_when_adapter_fails() -> None:
 
     facility = SimpleNamespace(latitude=45.81, longitude=15.98)
     assert road_distance_km(_fake_patient(44.55, 15.37), facility, _Broken()) is None  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("distances", [[], [[0.0]], [[0.0, "x"], ["x", 0.0]]])
+def test_road_distance_is_unknown_for_malformed_matrix(distances: Any) -> None:
+    from app.adapters.types import TravelMatrix
+
+    class _Malformed:
+        def matrix(self, points: Any) -> Any:
+            return TravelMatrix(durations_s=distances, distances_m=distances)
+
+    facility = SimpleNamespace(latitude=45.81, longitude=15.98)
+    assert road_distance_km(_fake_patient(44.55, 15.37), facility, _Malformed()) is None  # type: ignore[arg-type]

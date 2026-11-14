@@ -44,12 +44,21 @@ def check_postgis(conn: Connection) -> str:
     return str(version)
 
 
+def check_routing_config() -> None:
+    """Fail startup on a misconfigured routing adapter (no DB, no network)."""
+    try:
+        get_routing_client()
+    except (ValueError, NotImplementedError) as exc:
+        raise StartupCheckError(f"Routing adapter is misconfigured: {exc}") from exc
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         get_scoring_config()
     except ScoringConfigError as exc:
         raise StartupCheckError(f"Scoring configuration is invalid: {exc}") from exc
+    check_routing_config()
     if get_settings().check_db_on_startup:
         from app.db import engine
 
