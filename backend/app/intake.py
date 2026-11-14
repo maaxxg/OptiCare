@@ -7,7 +7,7 @@ import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 from pydantic import ValidationError
@@ -56,6 +56,22 @@ _MBO_SPOKEN_RE = re.compile(
     rf"\b(?:(?:{_SPOKEN_WORD_ALT})\s+){{8}}(?:{_SPOKEN_WORD_ALT})\b",
     re.IGNORECASE,
 )
+
+# MBO cues (matched on `_normalize`d text): a candidate counts as the MBO only when one of these
+# precedes it in the same sentence with at most 3 letter-only words in between.
+_MBO_CUES = (
+    r"m\.?\s?b\.?\s?o",
+    r"maticni\s+broj",
+    r"broj\s+osiguranja",
+    r"broj\s+osigurane\s+osobe",
+    r"broj\s+zdravstvene(?:\s+iskaznice)?",
+)
+_MBO_CUE_RE = re.compile(
+    rf"(?<!\w)(?:{'|'.join(_MBO_CUES)})(?!\w)\.?"
+    r"(?:[^\w.!?;]+[^\W\d_]+){0,3}[^\w.!?;]*\Z"
+)
+# A number right after the Croatian country code is a phone number, never an MBO.
+_PHONE_PREFIX_RE = re.compile(r"(?:\+|(?<!\d)00)385[\s\-]?\Z")
 
 SYSTEM_PROMPT_HR = (
     "Ti si medicinski administrativni asistent za sustav OptiCare u Ličko-senjskoj županiji.\n"
@@ -203,35 +219,51 @@ _STOP_WORDS_FIRST_NAME = {
 }
 
 
-def strip_mbo_from_text(text: str) -> tuple[str, str | None]:
-    """Remove all 9-digit MBO sequences (numeric or spoken words) before calling the LLM (E11-T1).
+class MboStrip(NamedTuple):
+    """Result of `strip_mbo_from_text`."""
 
-    Returns `(sanitized_text, first_extracted_mbo)`.
+    text: str
+    mbo: str | None
+    redacted: bool
+
+
+def strip_mbo_from_text(text: str) -> MboStrip:
+    """Redact every 9-digit candidate (numeric or spoken) before the LLM call (E11-T1).
+
+    The MBO is assigned only from a candidate that an MBO cue labels, and only when exactly one
+    distinct cued value exists; otherwise it is `None` (flagged for the nurse). Candidates right
+    after `+385` / `00385` are phone numbers and stay in the text. Never log text or candidates.
     """
-    extracted_mbo: str | None = None
-
-    def _replace_digits(match: re.Match[str]) -> str:
-        nonlocal extracted_mbo
-        digits = re.sub(r"\D", "", match.group(0))
+    candidates: list[tuple[int, int, str]] = []
+    for m in _MBO_DIGITS_RE.finditer(text):
+        digits = re.sub(r"\D", "", m.group(0))
         if len(digits) == 9:
-            if extracted_mbo is None:
-                extracted_mbo = digits
-            return "[MBO_REDACTED]"
-        return match.group(0)
-
-    def _replace_spoken(match: re.Match[str]) -> str:
-        nonlocal extracted_mbo
-        words = match.group(0).lower().split()
-        digits = "".join(_SPOKEN_DIGITS[w] for w in words if w in _SPOKEN_DIGITS)
+            candidates.append((m.start(), m.end(), digits))
+    for m in _MBO_SPOKEN_RE.finditer(text):
+        digits = "".join(_SPOKEN_DIGITS[w] for w in m.group(0).lower().split())
         if len(digits) == 9:
-            if extracted_mbo is None:
-                extracted_mbo = digits
-            return "[MBO_REDACTED]"
-        return match.group(0)
+            candidates.append((m.start(), m.end(), digits))
+    candidates.sort()
 
-    sanitized = _MBO_DIGITS_RE.sub(_replace_digits, text)
-    sanitized = _MBO_SPOKEN_RE.sub(_replace_spoken, sanitized)
-    return sanitized, extracted_mbo
+    cued: set[str] = set()
+    parts: list[str] = []
+    pos = 0
+    redacted = False
+    for start, end, digits in candidates:
+        if start < pos:
+            continue
+        prefix = text[:start]
+        if _PHONE_PREFIX_RE.search(prefix):
+            continue
+        if _MBO_CUE_RE.search(_normalize(prefix)):
+            cued.add(digits)
+        parts.append(text[pos:start])
+        parts.append("[MBO_REDACTED]")
+        pos = end
+        redacted = True
+    parts.append(text[pos:])
+    mbo = next(iter(cued)) if len(cued) == 1 else None
+    return MboStrip("".join(parts), mbo, redacted)
 
 
 def _canon_text(text: str) -> str:
@@ -257,7 +289,7 @@ def _load_canned_examples() -> dict[str, dict[str, Any]]:
         if not isinstance(item, dict) or "text" not in item or "expected" not in item:
             continue
         raw_text = str(item["text"])
-        stripped_text, _ = strip_mbo_from_text(raw_text)
+        stripped_text = strip_mbo_from_text(raw_text).text
         expected = item["expected"] if isinstance(item["expected"], dict) else {}
         raw_rev = item.get("review")
         review = [str(r) for r in raw_rev] if isinstance(raw_rev, list) else []
@@ -644,7 +676,8 @@ def extract_intake(
     geocoding_client: GeocodingClient,
 ) -> IntakeExtractResponse:
     """Extract structured `Patient` and `VisitRequest` drafts from free text (E2-T1, E11-T1)."""
-    sanitized_text, extracted_mbo = strip_mbo_from_text(text)
+    stripped = strip_mbo_from_text(text)
+    sanitized_text, extracted_mbo = stripped.text, stripped.mbo
 
     raw_response = llm_client.complete(SYSTEM_PROMPT_HR, sanitized_text)
     try:
@@ -667,7 +700,7 @@ def extract_intake(
         else []
     )
 
-    # Never trust an MBO produced by the LLM; only use the locally scrubbed 9-digit MBO.
+    # Never trust an MBO produced by the LLM; only use the cue-labelled MBO scrubbed locally.
     raw_patient.pop("mbo", None)
 
     invalid_fields: list[str] = []
@@ -712,5 +745,5 @@ def extract_intake(
         patient=patient_draft,
         visit_request=visit_draft,
         for_review=for_review,
-        mbo_stripped=extracted_mbo is not None,
+        mbo_stripped=stripped.redacted,
     )

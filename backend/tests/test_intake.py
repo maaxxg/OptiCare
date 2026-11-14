@@ -132,7 +132,7 @@ def test_mbo_is_stripped_before_llm_and_never_in_prompt() -> None:
         "U invalidskim je kolicima nakon operacije kuka i treba kontrolu kod ortopeda u Gospiću "
         "ovaj tjedan. Supruga ide sa mnom kao pratnja."
     )
-    sanitized, extracted_mbo = strip_mbo_from_text(raw_text)
+    sanitized, extracted_mbo, _ = strip_mbo_from_text(raw_text)
     assert extracted_mbo == "123456789"
     assert "123456789" not in sanitized
     assert "[MBO_REDACTED]" in sanitized
@@ -152,18 +152,102 @@ def test_mbo_is_stripped_before_llm_and_never_in_prompt() -> None:
 
 
 def test_spaced_and_spoken_mbo_are_stripped() -> None:
-    s1, m1 = strip_mbo_from_text("Da vam odmah dam MBO, 000 000 301. Hodam sa štapom.")
+    s1, m1, _ = strip_mbo_from_text("Da vam odmah dam MBO, 000 000 301. Hodam sa štapom.")
     assert m1 == "000000301"
     assert "000 000 301" not in s1
     assert "301" not in s1
 
-    s2, m2 = strip_mbo_from_text(
+    s2, m2, _ = strip_mbo_from_text(
         "MBO mi je nula nula nula nula nula nula tri nula tri. Telefon 000 0303."
     )
     assert m2 == "000000303"
     assert "nula nula" not in s2
     assert "tri nula tri" not in s2
     assert "000 0303" in s2
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_text", "expected_mbo"),
+    [
+        ("+385 91 234 5678", "+385 91 234 5678", None),
+        ("tel +385 00 000 0002", "tel +385 00 000 0002", None),
+        ("tel 0038591 234 5678", "tel 0038591 234 5678", None),
+        ("053 123 456", "[MBO_REDACTED]", None),
+        ("tel 053 572 111, MBO 123456789", "tel [MBO_REDACTED], MBO [MBO_REDACTED]", "123456789"),
+        ("tel 091 234 567", "tel [MBO_REDACTED]", None),
+        ("123456789", "[MBO_REDACTED]", None),
+        ("MBO 111111111 i MBO 222222222", "MBO [MBO_REDACTED] i MBO [MBO_REDACTED]", None),
+        (
+            "MBO 123456789. Ponavljam: MBO 123 456 789",
+            "MBO [MBO_REDACTED]. Ponavljam: MBO [MBO_REDACTED]",
+            "123456789",
+        ),
+        ("Matični broj: 123456789", "Matični broj: [MBO_REDACTED]", "123456789"),
+        ("M.B.O. 123456789", "M.B.O. [MBO_REDACTED]", "123456789"),
+        ("MBO je. 123456789", "MBO je. [MBO_REDACTED]", None),  # cue in another sentence
+        ("MBO mi je jedan dva tri 123456789", "MBO mi je jedan dva tri [MBO_REDACTED]", None),
+    ],
+)
+def test_mbo_assigned_only_from_cued_candidate(
+    text: str, expected_text: str, expected_mbo: str | None
+) -> None:
+    sanitized, mbo, _ = strip_mbo_from_text(text)
+    assert sanitized == expected_text
+    assert mbo == expected_mbo
+
+
+def test_spoken_mbo_after_cue_keeps_spoken_phone() -> None:
+    sanitized, mbo, redacted = strip_mbo_from_text(
+        "MBO mi je nula nula nula nula nula nula tri nula tri. Telefon nula nula nula nula "
+        "tri nula tri."
+    )
+    assert mbo == "000000303"
+    assert redacted is True
+    assert sanitized.startswith("MBO mi je [MBO_REDACTED].")
+    assert "nula nula nula nula tri nula tri" in sanitized
+
+
+def test_ambiguous_mbo_is_flagged_for_review_and_not_sent_to_llm() -> None:
+    spy = SpyLLMClient(delegate=MockLLMClient(response="{}"))
+    result = extract_intake(
+        text="MBO 111111111, a možda MBO 222222222.",
+        llm_client=spy,
+        geocoding_client=MockGeocodingClient(),
+    )
+    sent = spy.calls[0][1]
+    assert "111111111" not in sent
+    assert "222222222" not in sent
+    assert result.mbo_stripped is True
+    assert result.patient.mbo is None
+    assert "mbo" in result.for_review
+
+
+def test_uncued_number_sets_mbo_stripped_but_not_mbo() -> None:
+    spy = SpyLLMClient(delegate=MockLLMClient(response="{}"))
+    result = extract_intake(
+        text="Zovite me na 053 123 456.",
+        llm_client=spy,
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert "053 123 456" not in spy.calls[0][1]
+    assert result.mbo_stripped is True
+    assert result.patient.mbo is None
+    assert "mbo" in result.for_review
+
+
+def test_all_extraction_examples_mbo_from_cue_and_never_sent_to_llm() -> None:
+    path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
+    examples = yaml.safe_load(path.read_text(encoding="utf-8"))["examples"]
+    assert len(examples) >= 34
+    for ex in examples:
+        expected = ex.get("mbo_in_text")
+        sanitized, mbo, _ = strip_mbo_from_text(str(ex["text"]))
+        assert mbo == expected, ex.get("id")
+        if expected:
+            spaced = " ".join([expected[:3], expected[3:6], expected[6:]])
+            assert expected not in sanitized
+            assert spaced not in sanitized
+            assert "nula nula nula nula nula nula" not in sanitized.lower()
 
 
 def test_llm_hallucinated_mbo_is_discarded() -> None:
