@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from geoalchemy2 import Geography
 from shapely import wkt as shapely_wkt
@@ -18,8 +19,14 @@ from sqlalchemy.pool import StaticPool
 from app.adapters import get_llm_client
 from app.adapters.geocoding import MockGeocodingClient
 from app.adapters.llm import MockLLMClient
+from app.config import get_settings
 from app.db import Base, get_db
-from app.intake import SYSTEM_PROMPT_HR, extract_intake, strip_mbo_from_text
+from app.intake import (
+    EXTRACTION_EXAMPLES_PATH,
+    SYSTEM_PROMPT_HR,
+    extract_intake,
+    strip_mbo_from_text,
+)
 from app.main import app
 from app.models import (
     Department,
@@ -141,7 +148,22 @@ def test_mbo_is_stripped_before_llm_and_never_in_prompt() -> None:
     assert "123456789" not in sent_user
     assert result.mbo_stripped is True
     assert result.patient.mbo == "123456789"
-    assert "patient.mbo" not in result.for_review
+    assert "mbo" not in result.for_review
+
+
+def test_spaced_and_spoken_mbo_are_stripped() -> None:
+    s1, m1 = strip_mbo_from_text("Da vam odmah dam MBO, 000 000 301. Hodam sa štapom.")
+    assert m1 == "000000301"
+    assert "000 000 301" not in s1
+    assert "301" not in s1
+
+    s2, m2 = strip_mbo_from_text(
+        "MBO mi je nula nula nula nula nula nula tri nula tri. Telefon 000 0303."
+    )
+    assert m2 == "000000303"
+    assert "nula nula" not in s2
+    assert "tri nula tri" not in s2
+    assert "000 0303" in s2
 
 
 def test_llm_hallucinated_mbo_is_discarded() -> None:
@@ -169,11 +191,11 @@ def test_llm_hallucinated_mbo_is_discarded() -> None:
     )
     assert result.mbo_stripped is False
     assert result.patient.mbo is None
-    assert "patient.mbo" in result.for_review
+    assert "mbo" in result.for_review
 
 
 # ---------------------------------------------------------------------------
-# E2-T1 (KAN-18): Free-text extraction, Croatian prompt & for_review
+# E2-T1 (KAN-18) & E13-T5: Free-text extraction, Croatian prompt & for_review
 # ---------------------------------------------------------------------------
 
 
@@ -183,6 +205,46 @@ def test_croatian_prompt_contains_instructions_and_examples() -> None:
     assert "PRIMJER 2" in SYSTEM_PROMPT_HR
     assert '"patient"' in SYSTEM_PROMPT_HR
     assert '"visit_request"' in SYSTEM_PROMPT_HR
+
+
+def test_all_34_extraction_examples_from_domain_yaml() -> None:
+    path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    examples = data["examples"]
+    assert len(examples) == 34
+
+    geo = MockGeocodingClient()
+    for item in examples:
+        spy = SpyLLMClient()
+        res = extract_intake(item["text"], llm_client=spy, geocoding_client=geo)
+        _, sent_user = spy.calls[0]
+
+        if "mbo_in_text" in item:
+            expected_mbo = str(item["mbo_in_text"])
+            spaced_mbo = f"{expected_mbo[:3]} {expected_mbo[3:6]} {expected_mbo[6:]}"
+            assert res.mbo_stripped is True, item["id"]
+            assert res.patient.mbo == expected_mbo, item["id"]
+            assert "[MBO_REDACTED]" in sent_user, item["id"]
+            assert expected_mbo not in sent_user, item["id"]
+            assert spaced_mbo not in sent_user, item["id"]
+            assert "nula nula" not in sent_user.lower(), item["id"]
+        else:
+            assert res.mbo_stripped is False, item["id"]
+            assert res.patient.mbo is None, item["id"]
+            assert "mbo" in res.for_review, item["id"]
+
+        combined = {
+            **res.patient.model_dump(mode="json"),
+            **res.visit_request.model_dump(mode="json"),
+        }
+        for key, expected_val in item["expected"].items():
+            norm_expected = (
+                expected_val.isoformat() if isinstance(expected_val, date) else expected_val
+            )
+            assert combined[key] == norm_expected, f"{item['id']} field {key}"
+
+        for rev_field in item.get("review", []):
+            assert rev_field in res.for_review, f"{item['id']} missing review {rev_field}"
 
 
 def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestClient) -> None:
@@ -220,11 +282,11 @@ def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestCli
     assert body["visit_request"]["urgency_class"] == UrgencyClass.WITHIN_FEW_DAYS.value
 
     # Unmentioned required fields are flagged for review without guessing
-    assert "patient.first_name" in body["for_review"]
-    assert "patient.last_name" in body["for_review"]
-    assert "patient.phone" in body["for_review"]
-    assert "visit_request.earliest_date" in body["for_review"]
-    assert "visit_request.latest_date" in body["for_review"]
+    assert "first_name" in body["for_review"]
+    assert "last_name" in body["for_review"]
+    assert "phone" in body["for_review"]
+    assert "earliest_date" in body["for_review"]
+    assert "latest_date" in body["for_review"]
 
 
 def test_extract_intake_rejects_invalid_llm_enums_into_for_review() -> None:
@@ -255,9 +317,9 @@ def test_extract_intake_rejects_invalid_llm_enums_into_for_review() -> None:
     assert result.patient.mobility_class is None
     assert result.visit_request.department is None
     assert result.visit_request.latest_date is None
-    assert "patient.mobility_class" in result.for_review
-    assert "visit_request.department" in result.for_review
-    assert "visit_request.latest_date" in result.for_review
+    assert "mobility_class" in result.for_review
+    assert "department" in result.for_review
+    assert "latest_date" in result.for_review
 
 
 # ---------------------------------------------------------------------------

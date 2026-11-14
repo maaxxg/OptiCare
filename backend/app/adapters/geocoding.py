@@ -51,8 +51,16 @@ SETTLEMENT_DIRECTORY: tuple[_SettlementEntry, ...] = (
         ("baske ostarije", "baskim ostarijama"),
     ),
     _SettlementEntry(
+        GeocodedAddress(44.7319, 15.2747, "Gornji Kosinj", "Perušić"),
+        ("gornji kosinj", "gornjem kosinju", "gornjeg kosinja"),
+    ),
+    _SettlementEntry(
         GeocodedAddress(44.75986, 15.24962, "Donji Kosinj", "Perušić"),
         ("donji kosinj", "donjem kosinju", "donjeg kosinja", "kosinju", "kosinj"),
+    ),
+    _SettlementEntry(
+        GeocodedAddress(44.5028, 14.9961, "Metajna", "Novalja"),
+        ("metajna", "metajni", "metajne"),
     ),
     _SettlementEntry(
         GeocodedAddress(44.55213, 15.96096, "Donji Lapac", "Donji Lapac"),

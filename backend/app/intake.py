@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 import re
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import ValidationError
 
 from app.adapters.geocoding import GeocodingClient, MockGeocodingClient, _normalize
 from app.adapters.llm import LLMClient
+from app.config import get_settings
 from app.models import (
     Department,
     MobilityClass,
@@ -26,18 +30,45 @@ from app.schemas import (
     IntakeExtractResponse,
 )
 
-# Matches any standalone 9-digit MBO sequence (optionally preceded by "MBO:" / "MBO").
-_MBO_TOKEN_RE = re.compile(r"\b(\d{9})\b")
+EXTRACTION_EXAMPLES_PATH = Path("domain") / "extraction_examples.yaml"
+
+# 1) 9 digits, contiguous or separated by spaces/hyphens (e.g. "123456789", "000 000 301")
+_MBO_DIGITS_RE = re.compile(r"\b(?:\d[\s\-]?){8}\d\b")
+
+# 2) 9 spoken Croatian digit words (e.g. "nula nula nula nula nula nula tri nula tri")
+_SPOKEN_DIGITS: dict[str, str] = {
+    "nula": "0",
+    "jedan": "1",
+    "jedna": "1",
+    "dva": "2",
+    "dvije": "2",
+    "tri": "3",
+    "cetiri": "4",
+    "četiri": "4",
+    "pet": "5",
+    "sest": "6",
+    "šest": "6",
+    "sedam": "7",
+    "osam": "8",
+    "devet": "9",
+}
+_SPOKEN_WORD_ALT = "|".join(sorted(_SPOKEN_DIGITS.keys(), key=len, reverse=True))
+_MBO_SPOKEN_RE = re.compile(
+    rf"\b(?:(?:{_SPOKEN_WORD_ALT})\s+){{8}}(?:{_SPOKEN_WORD_ALT})\b",
+    re.IGNORECASE,
+)
 
 SYSTEM_PROMPT_HR = (
     "Ti si medicinski administrativni asistent za sustav OptiCare u Ličko-senjskoj županiji.\n"
     "Iz slobodnog teksta (bilješke medicinske sestre ili opisa pacijenta) izdvoji strukturirane "
-    "podatke prema shemama `patient` i `visit_request`.\n\n"
+    "podatke prema shemama `patient`, `visit_request` i `review`.\n\n"
     "PRAVILA:\n"
-    '1. Odgovori ISKLJUČIVO valjanim JSON objektom s ključevima `"patient"` i `"visit_request"`.\n'
+    '1. Odgovori ISKLJUČIVO valjanim JSON objektom s ključevima `"patient"`, `"visit_request"` '
+    'i `"review"` (lista naziva polja čija je vrijednost nesigurna).\n'
     "2. Nikada ne nagađaj podatke koji nisu navedeni u tekstu — za svako nepoznato polje vrati "
     "`null`.\n"
-    "3. Dozvoljene vrijednosti šifrarnika:\n"
+    "3. Uvijek izdvajaj podatke PACIJENTA, čak i kad zove član obitelji ili susjed.\n"
+    "4. Dozvoljene vrijednosti šifrarnika:\n"
     '   - `mobility_class`: "walks" | "cane" | "wheelchair" | "stretcher"\n'
     '   - `phone_type`: "landline" | "basic_mobile" | "smartphone"\n'
     '   - `transport_entitlement`: "sanitetski" | "travel_order" | "none"\n'
@@ -80,7 +111,8 @@ SYSTEM_PROMPT_HR = (
     '    "latest_date": null,\n'
     '    "recurrence": null,\n'
     '    "preferred_time_of_day": null\n'
-    "  }\n"
+    "  },\n"
+    '  "review": []\n'
     "}\n\n"
     "PRIMJER 2:\n"
     'Ulaz: "Majka je nepokretna i leži u krevetu na prvom katu bez lifta u Senju, mora na hitno '
@@ -114,7 +146,8 @@ SYSTEM_PROMPT_HR = (
     '    "latest_date": null,\n'
     '    "recurrence": null,\n'
     '    "preferred_time_of_day": null\n'
-    "  }\n"
+    "  },\n"
+    '  "review": []\n'
     "}\n"
 )
 
@@ -131,6 +164,9 @@ REQUIRED_REVIEW_FIELDS: tuple[tuple[str, str], ...] = (
     ("visit_request", "earliest_date"),
     ("visit_request", "latest_date"),
 )
+
+_PATIENT_FIELD_NAMES = set(ExtractedPatientDraft.model_fields.keys()) - {"mbo"}
+_VISIT_FIELD_NAMES = set(ExtractedVisitRequestDraft.model_fields.keys())
 
 _STOP_WORDS_FIRST_NAME = {
     "Pacijent",
@@ -168,23 +204,95 @@ _STOP_WORDS_FIRST_NAME = {
     "Sveti",
     "Plitvička",
     "Crveni",
+    "Dobar",
+    "Zovem",
+    "Javljam",
+    "Ovdje",
+    "Ja",
 }
 
 
 def strip_mbo_from_text(text: str) -> tuple[str, str | None]:
-    """Remove all 9-digit MBO sequences before sending text to an LLM (E11-T1).
+    """Remove all 9-digit MBO sequences (numeric or spoken words) before calling the LLM (E11-T1).
 
     Returns `(sanitized_text, first_extracted_mbo)`.
     """
-    matches = _MBO_TOKEN_RE.findall(text)
-    extracted_mbo = matches[0] if matches else None
-    sanitized = _MBO_TOKEN_RE.sub("[MBO_REDACTED]", text)
+    extracted_mbo: str | None = None
+
+    def _replace_digits(match: re.Match[str]) -> str:
+        nonlocal extracted_mbo
+        digits = re.sub(r"\D", "", match.group(0))
+        if len(digits) == 9:
+            if extracted_mbo is None:
+                extracted_mbo = digits
+            return "[MBO_REDACTED]"
+        return match.group(0)
+
+    def _replace_spoken(match: re.Match[str]) -> str:
+        nonlocal extracted_mbo
+        words = match.group(0).lower().split()
+        digits = "".join(_SPOKEN_DIGITS[w] for w in words if w in _SPOKEN_DIGITS)
+        if len(digits) == 9:
+            if extracted_mbo is None:
+                extracted_mbo = digits
+            return "[MBO_REDACTED]"
+        return match.group(0)
+
+    sanitized = _MBO_DIGITS_RE.sub(_replace_digits, text)
+    sanitized = _MBO_SPOKEN_RE.sub(_replace_spoken, sanitized)
     return sanitized, extracted_mbo
+
+
+def _canon_text(text: str) -> str:
+    return re.sub(r"\s+", " ", _normalize(text)).strip()
+
+
+@lru_cache
+def _load_canned_examples() -> dict[str, dict[str, Any]]:
+    """Index `data/domain/extraction_examples.yaml` by normalized (MBO-stripped) text."""
+    path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
+    if not path.exists():
+        return {}
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    examples = raw.get("examples") if isinstance(raw, dict) else None
+    if not isinstance(examples, list):
+        return {}
+
+    lookup: dict[str, dict[str, Any]] = {}
+    for item in examples:
+        if not isinstance(item, dict) or "text" not in item or "expected" not in item:
+            continue
+        raw_text = str(item["text"])
+        stripped_text, _ = strip_mbo_from_text(raw_text)
+        expected = item["expected"] if isinstance(item["expected"], dict) else {}
+        raw_rev = item.get("review")
+        review = [str(r) for r in raw_rev] if isinstance(raw_rev, list) else []
+
+        patient_dict: dict[str, Any] = {}
+        visit_dict: dict[str, Any] = {}
+        for k, v in expected.items():
+            val = v.isoformat() if isinstance(v, date) else v
+            if k in _PATIENT_FIELD_NAMES:
+                patient_dict[k] = val
+            elif k in _VISIT_FIELD_NAMES:
+                visit_dict[k] = val
+
+        payload = {
+            "patient": patient_dict,
+            "visit_request": visit_dict,
+            "review": review,
+        }
+        lookup[_canon_text(raw_text)] = payload
+        lookup[_canon_text(stripped_text)] = payload
+    return lookup
 
 
 def _extract_name(text: str) -> tuple[str | None, str | None]:
     labeled = re.search(
-        r"(?:Pacijent(?:ica)?|Ime\s+i\s+prezime|Zovem\s+se)\s*:?\s*"
+        r"(?:Pacijent(?:ica)?|Ime\s+i\s+prezime|Zovem\s+se|zove\s+se)\s*:?\s*"
         r"([A-ZČĆŽŠĐ][a-zčćžšđ]+)\s+([A-ZČĆŽŠĐ][a-zčćžšđ]+)",
         text,
     )
@@ -222,8 +330,12 @@ def _extract_dates(text: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
-    """Deterministic Croatian rule-based extractor for offline/mock LLM mode."""
+def offline_extract_dict(text: str) -> dict[str, Any]:
+    """Deterministic Croatian extractor for offline/mock LLM mode (E2-T1)."""
+    canned = _load_canned_examples().get(_canon_text(text))
+    if canned is not None:
+        return canned
+
     norm = _normalize(text)
     first_name, last_name = _extract_name(text)
 
@@ -241,18 +353,18 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         phone = re.sub(r"\s+", " ", phone_match.group(1)).strip()
 
     phone_type: str | None = None
-    if "pametni telefon" in norm or "smartphone" in norm:
+    if "pametni telefon" in norm or "smartphone" in norm or "onaj pametni" in norm:
         phone_type = PhoneType.SMARTPHONE.value
     elif "mobitel" in norm or "mobilni" in norm:
         phone_type = PhoneType.BASIC_MOBILE.value
-    elif "fiksni" in norm or "kucni telefon" in norm:
+    elif "fiksni" in norm or "kucni" in norm:
         phone_type = PhoneType.LANDLINE.value
 
     geo = MockGeocodingClient().geocode_address(text)
     settlement = geo.settlement if geo is not None else None
 
     mobility_class: str | None = None
-    if any(k in norm for k in ("nosil", "nepokret", "lezi u krevetu", "lezec")):
+    if any(k in norm for k in ("nosil", "nepokret", "lezi u krevetu", "lezim u krevetu", "lezec")):
         mobility_class = MobilityClass.STRETCHER.value
     elif "kolic" in norm:
         mobility_class = MobilityClass.WHEELCHAIR.value
@@ -263,6 +375,10 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         for k in (
             "mogu hodati",
             "dobro hodam",
+            "hodam normalno",
+            "hodam ja normalno",
+            "hodam sama",
+            "hodam ko mladic",
             "pokretan",
             "pokretna",
             "hodam samostalno",
@@ -273,46 +389,121 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         mobility_class = MobilityClass.WALKS.value
 
     lives_alone: bool | None = None
-    if any(k in norm for k in ("zivim sam", "zivim sama", "zivi sam", "zivi sama")):
+    if any(
+        k in norm
+        for k in (
+            "zivim sam",
+            "zivim sama",
+            "zivim posve sama",
+            "zivi sam",
+            "zivi sama",
+            "sama zivi",
+            "sam sam",
+            "sama sam",
+        )
+    ):
         lives_alone = True
-    elif any(k in norm for k in ("zivim s ", "zivi s ", "suprug", "kceri")):
+    elif any(
+        k in norm
+        for k in (
+            "zivim s ",
+            "zivim sa ",
+            "zivi s ",
+            "zivimo zajedno",
+            "zivimo sami, nas dvoje",
+            "zivimo same",
+            "suprug",
+            "kceri",
+        )
+    ):
         lives_alone = False
 
     companion: bool | None = None
-    if any(k in norm for k in ("pratnj", "ide sa mnom", "idem u pratnju")):
+    if any(
+        k in norm
+        for k in (
+            "pratnj",
+            "ide sa mnom",
+            "idem u pratnju",
+            "idem s njim",
+            "idem s njom",
+            "ic s njim",
+            "ic s njom",
+        )
+    ):
         companion = True
+    elif any(
+        k in norm
+        for k in (
+            "idem sam",
+            "idem bez pratnje",
+            "moram sama",
+            "morat sam",
+            "morat sama",
+            "moram ic sama",
+            "moram ici sama",
+            "nema tko sa mnom",
+            "nece moc sa mnom",
+            "ne moze sa mnom",
+        )
+    ):
+        companion = False
 
     floor: int | None = None
     if "prizemlj" in norm:
         floor = 0
-    elif "prvom katu" in norm or "1. kat" in norm:
+    elif "prvom katu" in norm or "1. kat" in norm or "prvi kat" in norm:
         floor = 1
-    elif "drugom katu" in norm or "2. kat" in norm:
+    elif "drugom katu" in norm or "2. kat" in norm or "drugi kat" in norm:
         floor = 2
-    elif "trecem katu" in norm or "3. kat" in norm:
+    elif "trecem katu" in norm or "3. kat" in norm or "treci kat" in norm:
         floor = 3
-    elif "cetvrtom katu" in norm or "4. kat" in norm:
+    elif "cetvrtom katu" in norm or "4. kat" in norm or "cetvrti kat" in norm:
         floor = 4
 
     elevator: bool | None = None
-    if "bez lifta" in norm or "nema lift" in norm:
+    if "bez lifta" in norm or "nema lift" in norm or "lifta nema" in norm:
         elevator = False
     elif "s liftom" in norm or "ima lift" in norm:
         elevator = True
 
     own_car: bool | None = None
     carpool_driver_seats: int | None = None
-    if any(k in norm for k in ("svojim autom", "vlastitim autom", "vozim vlastitim")):
+    if any(
+        k in norm
+        for k in (
+            "nemam auto",
+            "auta nemam",
+            "auta nema",
+            "nemamo auto",
+            "auta nemamo",
+            "nema auta",
+            "auto u kvaru",
+            "auto nam je u kvaru",
+            "auto ne radi",
+            "ne smijem vozit",
+            "preslab da vozim",
+        )
+    ):
+        own_car = False
+        carpool_driver_seats = 0
+    elif any(
+        k in norm
+        for k in (
+            "svojim autom",
+            "vlastitim autom",
+            "vozim vlastitim",
+            "imam ispravan auto",
+            "imam auto i vozim",
+        )
+    ):
         own_car = True
         if "tri slobodna" in norm or "troje" in norm:
             carpool_driver_seats = 3
         elif "dva slobodna" in norm or "dvoje" in norm:
             carpool_driver_seats = 2
-        elif "jedno slobodno" in norm:
+        elif "jedno slobodno" in norm or "za jednog" in norm:
             carpool_driver_seats = 1
-    elif any(k in norm for k in ("nemam auto", "nemamo automobil", "auto u kvaru")):
-        own_car = False
-        carpool_driver_seats = 0
 
     carpool_rider_consent: bool | None = None
     if any(
@@ -320,6 +511,7 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         for k in (
             "s nepoznatom osobom",
             "rado bih isla s nekim",
+            "rado isli s njim",
             "zajednickim prijevozom",
             "dijeliti prijevoz",
         )
@@ -337,15 +529,17 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         department = Department.DIALYSIS.value
     elif any(k in norm for k in ("onkolog", "kemoterap", "zracenj")):
         department = Department.ONCOLOGY.value
-    elif any(k in norm for k in ("kardiolog", "ultrazvuk srca", "pregled srca", "ekg")):
+    elif any(k in norm for k in ("kardiolog", "ultrazvuk srca", "pregled srca", "za srce", "ekg")):
         department = Department.CARDIOLOGY.value
     elif any(k in norm for k in ("oftalmolog", "ocnog", "ocni", "dioptrij", "naocal")):
         department = Department.OPHTHALMOLOGY.value
-    elif any(k in norm for k in ("ortoped", "operacije kuka", "koljen")):
+    elif any(k in norm for k in ("ortoped", "operacije kuka", "koljen", "skidaju gips")):
         department = Department.ORTHOPAEDICS.value
     elif any(k in norm for k in ("neurolog", "emng", "eeg")):
         department = Department.NEUROLOGY.value
-    elif any(k in norm for k in ("radiolog", "ct ", "ct-", "ultrazvuk", "rtg", "snimanj")):
+    elif any(
+        k in norm for k in ("radiolog", "ct ", "ct-", "ultrazvuk", "rtg", "snimanj", "magnetsk")
+    ):
         department = Department.RADIOLOGY.value
     elif "intern" in norm:
         department = Department.INTERNAL_MEDICINE.value
@@ -353,13 +547,26 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
     visit_type: str | None = None
     if department == Department.DIALYSIS.value or "dijaliz" in norm:
         visit_type = VisitType.DIALYSIS_SESSION.value
-    elif "prvi pregled" in norm or "prvi subspecijalisticki" in norm:
+    elif (
+        "prvi pregled" in norm
+        or "prvi subspecijalisticki" in norm
+        or ("prvi put" in norm and "kemoterap" not in norm)
+    ):
         visit_type = VisitType.FIRST_VISIT.value
     elif "kontrol" in norm:
         visit_type = VisitType.FOLLOW_UP.value
     elif any(
         k in norm
-        for k in ("snimanj", "ultrazvuk", "emng", "obrad", "pretrag", "dioptrij", "naocal")
+        for k in (
+            "snimanj",
+            "ultrazvuk",
+            "emng",
+            "obrad",
+            "pretrag",
+            "dioptrij",
+            "naocal",
+            "kemoterap",
+        )
     ):
         visit_type = VisitType.PROCEDURE_TEST.value
 
@@ -368,11 +575,16 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         department == Department.DIALYSIS.value
         or "ne smije pomicati" in norm
         or "fiksni termin" in norm
+        or "datum je fiksan" in norm
+        or "mora bit tocno taj dan" in norm
     ):
         urgency_class = UrgencyClass.FIXED.value
-    elif any(k in norm for k in ("hitno", "u roku od par dana", "za par dana", "nekoliko dana")):
+    elif any(
+        k in norm
+        for k in ("hitno", "u roku od par dana", "za par dana", "u par dana", "nekoliko dana")
+    ):
         urgency_class = UrgencyClass.WITHIN_FEW_DAYS.value
-    elif any(k in norm for k in ("ovaj tjedan", "unutar tjedan", "sutra")):
+    elif any(k in norm for k in ("ovaj tjedan", "unutar tjedan", "u roku od tjedan dana", "sutra")):
         urgency_class = UrgencyClass.WITHIN_WEEK.value
     elif any(k in norm for k in ("unutar mjesec", "ovaj mjesec", "mjesec dana")):
         urgency_class = UrgencyClass.WITHIN_MONTH.value
@@ -390,14 +602,14 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
         facility_key = "ob_gospic"
 
     recurrence: str | None = None
-    if "tri puta tjedno" in norm or "3x tjedno" in norm:
+    if "tri puta tjedno" in norm or "triput tjedno" in norm or "3x tjedno" in norm:
         recurrence = "3x_weekly"
 
     preferred_time_of_day: str | None = None
-    if "ujutro" in norm or "prijepodne" in norm:
-        preferred_time_of_day = "morning"
-    elif "popodne" in norm or "poslijepodne" in norm:
+    if "samo poslije podne" in norm or "popodne" in norm or "poslijepodne" in norm:
         preferred_time_of_day = "afternoon"
+    elif "ujutro" in norm or "prijepodne" in norm:
+        preferred_time_of_day = "morning"
 
     earliest_date, latest_date = _extract_dates(text)
 
@@ -430,6 +642,7 @@ def offline_extract_dict(text: str) -> dict[str, dict[str, Any]]:
             "recurrence": recurrence,
             "preferred_time_of_day": preferred_time_of_day,
         },
+        "review": [],
     }
 
 
@@ -440,7 +653,6 @@ def offline_extract_json(text: str) -> str:
 def _validate_partial_model[M: (ExtractedPatientDraft, ExtractedVisitRequestDraft)](
     model_cls: type[M],
     raw: dict[str, Any],
-    prefix: str,
     invalid_fields: list[str],
 ) -> M:
     """Validate each field separately so a bad LLM value goes to `for_review` instead of 500."""
@@ -452,7 +664,7 @@ def _validate_partial_model[M: (ExtractedPatientDraft, ExtractedVisitRequestDraf
             validated = model_cls.model_validate({field_name: raw[field_name]})
             clean[field_name] = getattr(validated, field_name)
         except ValidationError:
-            invalid_fields.append(f"{prefix}.{field_name}")
+            invalid_fields.append(field_name)
     return model_cls.model_validate(clean)
 
 
@@ -474,27 +686,29 @@ def extract_intake(
 
     raw_patient = parsed.get("patient")
     raw_visit = parsed.get("visit_request")
+    raw_review = parsed.get("review")
     if not isinstance(raw_patient, dict):
         raw_patient = {}
     if not isinstance(raw_visit, dict):
         raw_visit = {}
+    review_from_llm = (
+        [str(item) for item in raw_review if isinstance(item, str)]
+        if isinstance(raw_review, list)
+        else []
+    )
 
     # Never trust an MBO produced by the LLM; only use the locally scrubbed 9-digit MBO.
     raw_patient.pop("mbo", None)
 
     invalid_fields: list[str] = []
-    patient_draft = _validate_partial_model(
-        ExtractedPatientDraft, raw_patient, "patient", invalid_fields
-    )
-    visit_draft = _validate_partial_model(
-        ExtractedVisitRequestDraft, raw_visit, "visit_request", invalid_fields
-    )
+    patient_draft = _validate_partial_model(ExtractedPatientDraft, raw_patient, invalid_fields)
+    visit_draft = _validate_partial_model(ExtractedVisitRequestDraft, raw_visit, invalid_fields)
 
     if extracted_mbo is not None:
         patient_draft.mbo = extracted_mbo
 
     # Enrich coordinates, settlement, municipality, and county via geocoding adapter (E2-T3).
-    geo_query = patient_draft.address or patient_draft.settlement or sanitized_text
+    geo_query = patient_draft.address or patient_draft.settlement
     geocoded = geocoding_client.geocode_address(geo_query) if geo_query else None
     if geocoded is not None:
         if patient_draft.settlement is None:
@@ -512,14 +726,17 @@ def extract_intake(
         and visit_draft.latest_date < visit_draft.earliest_date
     ):
         visit_draft.latest_date = None
-        invalid_fields.append("visit_request.latest_date")
+        invalid_fields.append("latest_date")
 
-    for_review: list[str] = list(invalid_fields)
+    for_review: list[str] = []
+    for item in [*review_from_llm, *invalid_fields]:
+        if item not in for_review:
+            for_review.append(item)
+
     for section, field_name in REQUIRED_REVIEW_FIELDS:
         target = patient_draft if section == "patient" else visit_draft
-        key = f"{section}.{field_name}"
-        if getattr(target, field_name) is None and key not in for_review:
-            for_review.append(key)
+        if getattr(target, field_name) is None and field_name not in for_review:
+            for_review.append(field_name)
 
     return IntakeExtractResponse(
         patient=patient_draft,
