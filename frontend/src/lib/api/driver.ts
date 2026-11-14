@@ -83,22 +83,27 @@ const MOCK_ROUTES: Record<string, DriverRouteResponse> = {
 // Lokalna memorija statusa dok backend ne bude spojen
 const memoryStatusStore = new Map<string, Record<string, StopStatus>>();
 
+// Backend E7 (FastAPI) još ne postoji u ovoj fazi (E10-T1 [M]).
+// Postaviti na true kad backend endpoint /api/driver/{token}/route postane dostupan.
+const USE_BACKEND = false;
+
 /**
  * Dohvaća rutu vozača preko jednodnevnog tokena: GET /driver/{token}/route
  */
 export async function getDriverRoute(token: string): Promise<DriverRouteResponse> {
-	try {
-		// Pokušaj poziva stvarnog backenda ako postoji
-		const res = await fetch(`/api/driver/${encodeURIComponent(token)}/route`);
-		if (res.ok) {
-			const data = (await res.json()) as DriverRouteResponse;
-			return data;
+	if (USE_BACKEND) {
+		try {
+			const res = await fetch(`/api/driver/${encodeURIComponent(token)}/route`);
+			if (res.ok) {
+				const data = (await res.json()) as DriverRouteResponse;
+				return data;
+			}
+		} catch {
+			// Backend nije dostupan — koristi mock ugovor
 		}
-	} catch {
-		// Backend nije dostupan — koristi mock ugovor
 	}
 
-	// Mock fallback (za 'demo' ili bilo koji uneseni token)
+	// Mock odgovor točno u formatu GET /driver/{token}/route
 	const base = MOCK_ROUTES[token] ?? {
 		...MOCK_ROUTES.demo,
 		token
@@ -127,15 +132,17 @@ export async function updateDriverStopStatus(
 	stopId: string,
 	status: StopStatus
 ): Promise<void> {
-	try {
-		const res = await fetch(`/api/driver/${encodeURIComponent(token)}/status`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ stopId, status, timestamp: new Date().toISOString() })
-		});
-		if (res.ok) return;
-	} catch {
-		// fallback
+	if (USE_BACKEND) {
+		try {
+			const res = await fetch(`/api/driver/${encodeURIComponent(token)}/status`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ stopId, status, timestamp: new Date().toISOString() })
+			});
+			if (res.ok) return;
+		} catch {
+			// fallback
+		}
 	}
 
 	// Zabilježi lokalno u memoriji
