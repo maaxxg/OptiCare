@@ -1,5 +1,15 @@
 <script lang="ts">
+	import logo from '#lib/assets/opticare-logo.svg';
+	import { getDoctorName, logout } from '#lib/stores/auth.js';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+
+	const doctorName = getDoctorName();
+
+	function handleLogout() {
+		logout();
+		goto(resolve('/login'));
+	}
 </script>
 
 <svelte:head>
@@ -8,7 +18,13 @@
 
 <div class="page">
 	<div class="page-header">
-		<div class="logo-dot"></div>
+		<img src={logo} alt="OptiCare" class="logo-full" />
+		<div class="page-header-right">
+			{#if doctorName}
+				<span class="doctor-name">{doctorName}</span>
+			{/if}
+			<button class="logout-btn" onclick={handleLogout}>Odjava</button>
+		</div>
 	</div>
 
 	<h1 class="page-title">Dobro došli</h1>
@@ -26,5 +42,27 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
+	}
+
+	.doctor-name {
+		font-size: 0.9rem;
+		color: var(--text-muted);
+		font-weight: 500;
+	}
+
+	.logout-btn {
+		background: none;
+		border: 1.5px solid var(--border);
+		border-radius: var(--radius-pill);
+		padding: 6px 16px;
+		font-size: 0.85rem;
+		font-family: var(--font-sans);
+		color: var(--text);
+		cursor: pointer;
+		transition: background 0.2s;
+	}
+
+	.logout-btn:hover {
+		background: var(--green-light);
 	}
 </style>
