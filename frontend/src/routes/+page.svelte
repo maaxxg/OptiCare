@@ -33,6 +33,9 @@
 	<div class="dashboard-actions">
 		<a href={resolve('/unos')} class="action-card">Unos podataka o pacijentu</a>
 		<a href={resolve('/raspored')} class="action-card">Raspored</a>
+		<a href={resolve('/mobilno')} class="action-card action-card-mobile"
+			>📱 Mobilno sučelje (za vozače)</a
+		>
 	</div>
 </div>
 
@@ -42,6 +45,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
+	}
+
+	.action-card-mobile {
+		background: #ffffff;
+		color: #2e6226;
+		border: 2px dashed #92c18b;
+	}
+
+	.action-card-mobile:hover {
+		background: #e8eed9;
 	}
 
 	.doctor-name {

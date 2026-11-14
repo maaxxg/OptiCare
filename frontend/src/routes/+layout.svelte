@@ -12,7 +12,8 @@
 
 	onMount(() => {
 		const loginPath = resolve('/login');
-		if (!isLoggedIn() && !page.url.pathname.startsWith(loginPath)) {
+		const isMobileRoute = page.url.pathname.includes('/mobilno');
+		if (!isLoggedIn() && !page.url.pathname.startsWith(loginPath) && !isMobileRoute) {
 			goto(loginPath);
 		}
 	});
