@@ -38,7 +38,7 @@ Sustav stoji između ordinacije obiteljske medicine, doma zdravlja i bolnice, i 
 
 - **Uputnica i naručivanje.** Izabrani liječnik izdaje eUputnicu i naručuje kroz eNaručivanje, traži termin od ustanove ili se pacijent naručuje sam s MBO-om. Bolnice i primarna zaštita povezane su kroz CEZIH. ([Dnevnik.hr](https://dnevnik.hr/vijesti/hrvatska/hzzo-umjesto-papirnatih-od-danas-euputnice---622465.html))
 - **Sanitetski prijevoz.** HZZO ga priznaje samo osiguranim osobama koje su nepokretne, teško pokretne ili im se ne preporučuje samostalno kretanje, na temelju naloga. ([HZZO](https://hzzo.hr/wp-content/uploads/2014/01/PUTNI_TROSAK-ISL.pdf), [Pravilnik](https://www.zakon.hr/cms.htm?id=7708))
-- **Putni nalog.** Pacijentima upućenima izvan mjesta prebivališta koji nemaju pravo na sanitetski prijevoz nadoknađuje se trošak javnog prijevoza. ([HZZO](https://hzzo.hr/wp-content/uploads/2014/01/PUTNI_TROSAK-ISL.pdf))
+- **Putni nalog.** Pacijent koji nema pravo na sanitetski prijevoz, a upućen je najbližoj ugovornoj ustanovi s tom djelatnošću udaljenoj 50 i više km od adrese, dobiva naknadu od 0,025 % proračunske osnovice po kilometru (oko 0,11 €), za bilo koje prijevozno sredstvo. Od 1. 8. 2025. udaljenost se mjeri najkraćom cestovnom relacijom prema karti HAK-a. Bez obzira na udaljenost pravo imaju, među ostalima, osobe do 18 godina te pacijenti na hemodijalizi, kemoterapiji i radioterapiji. Nalog izdaje izabrani liječnik. Dijaliza ili kemoterapija sama po sebi ne daje pravo na sanitetski prijevoz. Pravila za sustav su u `data/domain/hzzo_rules.yaml`. ([ZOZO, izmjene 2025.](https://sabor.hr/sites/default/files/uploads/sabor/2025-06-27/154502/PZ_148.pdf), [VUS Usoz-264/2023](https://sudovi.hr/sites/default/files/dokumenti/2025-05/Usoz-264-2023-O-A.pdf))
 - **Opterećenje sanitetskog prijevoza.** Javni izvori ne pokazuju slobodan kapacitet: u Splitu se u pojedine dane uključuju rezervna vozila hitne, a sanitetski prijevoz sve više koriste pokretne osobe kojima liječnici naloge izdaju i iz socijalnih razloga ([Dnevnik.hr](https://dnevnik.hr/vijesti/hrvatska/split-prijeti-kolaps-zbog-velikog-porasta-sanitetskog-prijevoza-pacijenata---575245.html)). Sustav zato ne računa na višak sanitetskih vozila, nego ih rasterećuje preusmjeravanjem pokretnih pacijenata na druge oblike prijevoza.
 - **Praznina.** Osoba koja može hodati, ali nema autobusnu liniju, automobil ni pomagača, ne dobiva sanitetski prijevoz, a naknada ne vrijedi ništa tamo gdje javnog prijevoza nema. Ta skupina je glavna ciljna skupina sustava.
 
@@ -300,6 +300,8 @@ Podaci za demo: 15 do 20 pacijenata u Ličko-senjskoj županiji, sanitetska vozi
 
 - [HZZO: Putni trošak](https://hzzo.hr/wp-content/uploads/2014/01/PUTNI_TROSAK-ISL.pdf)
 - [Pravilnik o sanitetskom prijevozu (zakon.hr)](https://www.zakon.hr/cms.htm?id=7708)
+- [Sabor: izmjene Zakona o obveznom zdravstvenom osiguranju, PZ 148 (2025.)](https://sabor.hr/sites/default/files/uploads/sabor/2025-06-27/154502/PZ_148.pdf)
+- [Visoki upravni sud: Usoz-264/2023](https://sudovi.hr/sites/default/files/dokumenti/2025-05/Usoz-264-2023-O-A.pdf)
 - [Pravilnik, novija verzija (zakon.hr)](https://www.zakon.hr/cms.htm?id=39933)
 - [Dnevnik.hr: eUputnice](https://dnevnik.hr/vijesti/hrvatska/hzzo-umjesto-papirnatih-od-danas-euputnice---622465.html)
 - [Dnevnik.hr: naknada troškova prijevoza](https://dnevnik.hr/vijesti/hrvatska/imas-pravo-ostvari-ga-kako-do-naknade-troskova-prijevoza-u-zdravstvu---666604.html)
