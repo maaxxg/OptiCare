@@ -11,7 +11,7 @@ from app.codebooks import Codebooks, get_codebooks
 from app.config import get_settings
 from app.db import get_db
 from app.models import Patient
-from app.scoring import ScoringResult, compute_score
+from app.scoring import ScoringConfigError, ScoringResult, compute_score, get_scoring_config
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -39,6 +39,10 @@ def check_postgis(conn: Connection) -> str:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        get_scoring_config()
+    except ScoringConfigError as exc:
+        raise StartupCheckError(f"Scoring configuration is invalid: {exc}") from exc
     if get_settings().check_db_on_startup:
         from app.db import engine
 
@@ -82,6 +86,18 @@ def get_patient_score(
     adapter za rute na temelju adrese pacijenta i odredišta.  Ako se ne
     proslijedi, faktor udaljenosti doprinosi 0.
     """
+    try:
+        config = get_scoring_config()
+    except ScoringConfigError:
+        logger.exception("Scoring configuration is invalid")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Bodovanje trenutačno nije dostupno jer konfiguracija nije ispravna. "
+                "Obratite se administratoru."
+            ),
+        ) from None
+
     patient = db.get(Patient, patient_id)
     if patient is None:
         raise HTTPException(status_code=404, detail="Pacijent nije pronađen.")
@@ -95,4 +111,5 @@ def get_patient_score(
         missed_visits_last_year=patient.missed_visits_last_year,
         phone_type=patient.phone_type,
         companion_available=patient.companion,
+        config=config,
     )

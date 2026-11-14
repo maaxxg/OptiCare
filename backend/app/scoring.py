@@ -1,4 +1,4 @@
-"""Bodovanje potrebe za podrškom (E13-T3, KAN-89).
+"""Bodovanje potrebe za podrškom (E3-T1; sadržaj YAML-a je E13-T3, KAN-89).
 
 Učitava faktore i razine iz ``data/domain/scoring_factors.yaml``, izračunava
 težinski zbroj za danog pacijenta i vraća ukupni bod, doprinos svakog faktora
@@ -11,19 +11,39 @@ faktor, prag ni razina ne smije ukloniti, odbiti ni deprioritizirati pacijenta.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.config import get_settings
+from app.models import MobilityClass, PhoneType
 
 SCORING_RELATIVE_PATH = Path("domain") / "scoring_factors.yaml"
 
 logger = logging.getLogger(__name__)
+
+KNOWN_FACTOR_KEYS = frozenset(
+    {
+        "mobility_class",
+        "distance_to_destination",
+        "age",
+        "lives_alone",
+        "missed_visits_last_year",
+        "phone_type",
+        "companion_available",
+    }
+)
+_MAPPING_ENUMS: dict[str, set[str]] = {
+    "mobility_class": {m.value for m in MobilityClass},
+    "phone_type": {p.value for p in PhoneType},
+}
+_BOOLEAN_FACTORS = frozenset({"lives_alone", "companion_available"})
+_BAND_FACTORS = frozenset({"age", "distance_to_destination", "missed_visits_last_year"})
 
 
 class ScoringConfigError(Exception):
@@ -54,6 +74,43 @@ class FactorConfig(BaseModel):
     if_true: float | None = None
     if_false: float | None = None
 
+    @model_validator(mode="after")
+    def _check_single_kind(self) -> FactorConfig:
+        is_boolean = self.if_true is not None or self.if_false is not None
+        kinds = [self.bands is not None, self.mapping is not None, is_boolean]
+        if sum(kinds) != 1:
+            raise ValueError(
+                f"factor '{self.key}' must define exactly one of bands, mapping, "
+                "or if_true/if_false"
+            )
+        if self.bands is not None:
+            self._check_bands(self.bands)
+        elif self.mapping is not None:
+            if not self.mapping:
+                raise ValueError(f"factor '{self.key}': mapping is empty")
+            if any(not 0.0 <= v <= 1.0 for v in self.mapping.values()):
+                raise ValueError(f"factor '{self.key}': mapping values must be in [0, 1]")
+        else:
+            if self.if_true is None or self.if_false is None:
+                raise ValueError(f"factor '{self.key}': both if_true and if_false are required")
+            if not (0.0 <= self.if_true <= 1.0 and 0.0 <= self.if_false <= 1.0):
+                raise ValueError(f"factor '{self.key}': if_true/if_false must be in [0, 1]")
+        return self
+
+    def _check_bands(self, bands: list[BandEntry]) -> None:
+        if not bands:
+            raise ValueError(f"factor '{self.key}': bands are empty")
+        if bands[-1].max is not None:
+            raise ValueError(f"factor '{self.key}': last band must have max null")
+        maxes = [b.max for b in bands[:-1]]
+        previous: float | None = None
+        for m in maxes:
+            if m is None or (previous is not None and m <= previous):
+                raise ValueError(
+                    f"factor '{self.key}': band max values must be numbers, strictly increasing"
+                )
+            previous = m
+
 
 class LevelConfig(BaseModel):
     key: str
@@ -66,6 +123,52 @@ class LevelConfig(BaseModel):
 class ScoringConfig(BaseModel):
     factors: list[FactorConfig]
     levels: list[LevelConfig]
+
+    @model_validator(mode="after")
+    def _check_config(self) -> ScoringConfig:
+        self._check_factors()
+        self._check_levels()
+        return self
+
+    def _check_factors(self) -> None:
+        if not self.factors:
+            raise ValueError("factors are empty")
+        keys = [f.key for f in self.factors]
+        if len(set(keys)) != len(keys):
+            raise ValueError("duplicate factor keys")
+        unknown = set(keys) - KNOWN_FACTOR_KEYS
+        if unknown:
+            raise ValueError(f"unknown factor keys: {sorted(unknown)}")
+        total = sum(f.weight for f in self.factors)
+        if not math.isclose(total, 1.0, abs_tol=1e-6):
+            raise ValueError(f"factor weights must sum to 1.0, got {total}")
+        for f in self.factors:
+            expected = _MAPPING_ENUMS.get(f.key)
+            if expected is not None and (f.mapping is None or set(f.mapping) != expected):
+                raise ValueError(
+                    f"factor '{f.key}': mapping keys must be exactly {sorted(expected)}"
+                )
+            if f.key in _BOOLEAN_FACTORS and (f.if_true is None or f.if_false is None):
+                raise ValueError(f"factor '{f.key}' must be a boolean factor")
+            if f.key in _BAND_FACTORS and f.bands is None:
+                raise ValueError(f"factor '{f.key}' must be a band factor")
+
+    def _check_levels(self) -> None:
+        if not self.levels:
+            raise ValueError("levels are empty")
+        keys = [lv.key for lv in self.levels]
+        if len(set(keys)) != len(keys):
+            raise ValueError("duplicate level keys")
+        for lv in self.levels:
+            if lv.min_score >= lv.max_score:
+                raise ValueError(f"level '{lv.key}': min_score must be below max_score")
+        if self.levels[0].min_score != 0.0:
+            raise ValueError("first level must start at min_score 0.0")
+        for prev, nxt in zip(self.levels, self.levels[1:], strict=False):
+            if nxt.min_score != prev.max_score:
+                raise ValueError(f"levels '{prev.key}' and '{nxt.key}' are not contiguous")
+        if self.levels[-1].max_score <= 1.0:
+            raise ValueError("last level max_score must be above 1.0 to cover a score of 1.0")
 
 
 # ---------------------------------------------------------------------------
@@ -134,8 +237,7 @@ def _resolve_bands(bands: list[BandEntry], value: float) -> float:
     for band in bands:
         if band.max is not None and value < band.max:
             return band.value
-    # Ako smo prošli sve pojaseve (last band.max je None ili value >= svi max),
-    # vrati zadnji pojas.
+    # Zadnji pojas je otvoren (max: null), što validacija konfiguracije jamči.
     return bands[-1].value
 
 
@@ -169,8 +271,7 @@ def _determine_level(config: ScoringConfig, score: float) -> LevelConfig:
     for level in config.levels:
         if level.min_score <= score < level.max_score:
             return level
-    # Fallback: zadnja razina ako nema podudaranja (ne bi se smjelo desiti)
-    return config.levels[-1]
+    raise ScoringConfigError(f"No scoring level covers score {score}")
 
 
 def _patient_age(birth_year: int | None, reference_date: date | None = None) -> int | None:
@@ -214,6 +315,7 @@ def compute_score(
         "companion_available": companion_available,
     }
 
+    assert set(inputs) == KNOWN_FACTOR_KEYS
     contributions: list[FactorContribution] = []
     total = 0.0
 
@@ -234,6 +336,7 @@ def compute_score(
             )
         )
 
+    # Težine se validiraju na zbroj 1; min() štiti samo od float šuma.
     total = round(min(total, 1.0), 4)
     level = _determine_level(cfg, total)
 

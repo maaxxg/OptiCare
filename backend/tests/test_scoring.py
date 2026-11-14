@@ -13,10 +13,14 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
+from fastapi.testclient import TestClient
 
+from app.db import get_db
+from app.main import app
 from app.scoring import (
-    FactorContribution,
     ScoringConfig,
+    ScoringConfigError,
     ScoringResult,
     _determine_level,
     _patient_age,
@@ -25,7 +29,6 @@ from app.scoring import (
     compute_score,
     load_scoring_config,
 )
-
 
 # ---------------------------------------------------------------------------
 # Pomoćni podaci (fixture)
@@ -299,3 +302,104 @@ def test_compute_score_max_need_patient(config: ScoringConfig) -> None:
     )
     assert result.total_score >= 0.95
     assert result.level_key == "high"
+
+
+# ---------------------------------------------------------------------------
+# Validacija konfiguracije
+# ---------------------------------------------------------------------------
+
+
+def _mutated(mutate) -> dict:  # type: ignore[no-untyped-def]
+    data = yaml.safe_load(SCORING_YAML.read_text(encoding="utf-8"))
+    mutate(data)
+    return data
+
+
+def _factor(data: dict, key: str) -> dict:
+    return next(f for f in data["factors"] if f["key"] == key)
+
+
+def _bands_and_mapping(d: dict) -> None:
+    _factor(d, "age")["mapping"] = {"x": 0.5}
+
+
+def _only_if_true(d: dict) -> None:
+    del _factor(d, "lives_alone")["if_false"]
+
+
+def _empty_bands(d: dict) -> None:
+    _factor(d, "age")["bands"] = []
+
+
+def _non_increasing(d: dict) -> None:
+    _factor(d, "age")["bands"][1]["max"] = 65
+
+
+def _last_band_closed(d: dict) -> None:
+    _factor(d, "age")["bands"][-1]["max"] = 120
+
+
+def _weights_high(d: dict) -> None:
+    _factor(d, "age")["weight"] = 0.25
+
+
+def _unknown_key(d: dict) -> None:
+    _factor(d, "age")["key"] = "shoe_size"
+
+
+def _duplicate_key(d: dict) -> None:
+    d["factors"].append(dict(_factor(d, "age"), weight=0.0))
+
+
+def _missing_stretcher(d: dict) -> None:
+    del _factor(d, "mobility_class")["mapping"]["stretcher"]
+
+
+def _empty_levels(d: dict) -> None:
+    d["levels"] = []
+
+
+def _level_gap(d: dict) -> None:
+    d["levels"][1]["min_score"] = 0.40
+
+
+def _last_level_too_low(d: dict) -> None:
+    d["levels"][-1]["max_score"] = 1.0
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        _bands_and_mapping,
+        _only_if_true,
+        _empty_bands,
+        _non_increasing,
+        _last_band_closed,
+        _weights_high,
+        _unknown_key,
+        _duplicate_key,
+        _missing_stretcher,
+        _empty_levels,
+        _level_gap,
+        _last_level_too_low,
+    ],
+)
+def test_invalid_scoring_config_is_rejected(mutate, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    path = tmp_path / "scoring.yaml"
+    path.write_text(yaml.safe_dump(_mutated(mutate)), encoding="utf-8")
+    with pytest.raises(ScoringConfigError):
+        load_scoring_config(path)
+
+
+def test_score_endpoint_returns_croatian_error_on_bad_config(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def broken() -> ScoringConfig:
+        raise ScoringConfigError("broken")
+
+    monkeypatch.setattr("app.main.get_scoring_config", broken)
+    app.dependency_overrides[get_db] = lambda: None
+    try:
+        response = TestClient(app).get("/score/1")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith("Bodovanje trenutačno nije dostupno")
