@@ -57,9 +57,7 @@ def test_visit_duration_distributions_match_codebooks() -> None:
     ]
     for dept, vtype in pairs_to_check:
         durations = [
-            _visit_minutes(r)
-            for r in rows
-            if r.department == dept and r.visit_type == vtype
+            _visit_minutes(r) for r in rows if r.department == dept and r.visit_type == vtype
         ]
         assert len(durations) >= 50
         expected_median = get_visit_duration(dept, vtype).median_min
