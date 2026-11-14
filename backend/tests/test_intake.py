@@ -123,6 +123,27 @@ def test_spaced_and_spoken_mbo_are_stripped() -> None:
         ("M.B.O. 123456789", "M.B.O. [MBO_REDACTED]", "123456789"),
         ("MBO je. 123456789", "MBO je. [MBO_REDACTED]", None),  # cue in another sentence
         ("MBO mi je jedan dva tri 123456789", "MBO mi je jedan dva tri [MBO_REDACTED]", None),
+        # cued runs of the wrong length are redacted whole and never become the MBO
+        ("MBO 12345678901", "MBO [MBO_REDACTED]", None),
+        ("MBO 12345678", "MBO [MBO_REDACTED]", None),
+        ("MBO 123 456 789 01", "MBO [MBO_REDACTED]", None),
+        (
+            "MBO je nula nula nula nula nula nula tri nula tri jedan",
+            "MBO je [MBO_REDACTED]",
+            None,
+        ),
+        ("MBO 000 000 301, tel 091 555 1234", "MBO [MBO_REDACTED], tel 091 555 1234", "000000301"),
+        ("MBO 000 000 301 091 555 1234", "MBO [MBO_REDACTED]", None),
+        (
+            "MBO 12345678901, ispravak: MBO 123456789",
+            "MBO [MBO_REDACTED], ispravak: MBO [MBO_REDACTED]",
+            None,
+        ),
+        ("MBO ne znam, rođen 1950", "MBO ne znam, rođen 1950", None),
+        # uncued behaviour unchanged
+        ("tel 0915551234", "tel 0915551234", None),
+        ("tel 091 555 1234", "tel 091 555 1234", None),
+        ("Rođen 1950 053 123 456", "Rođen 1950 [MBO_REDACTED]", None),
     ],
 )
 def test_mbo_assigned_only_from_cued_candidate(
@@ -155,6 +176,18 @@ def test_ambiguous_mbo_is_flagged_for_review_and_not_sent_to_llm() -> None:
     assert "111111111" not in sent
     assert "222222222" not in sent
     assert result.mbo_stripped is True
+    assert result.patient.mbo is None
+    assert "mbo" in result.for_review
+
+
+def test_overlong_cued_number_is_not_sent_to_llm_and_flagged() -> None:
+    spy = SpyLLMClient(delegate=MockLLMClient(response="{}"))
+    result = extract_intake(
+        text="MBO 12345678901.",
+        llm_client=spy,
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert "12345678901" not in spy.calls[0][1]
     assert result.patient.mbo is None
     assert "mbo" in result.for_review
 

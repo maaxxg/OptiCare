@@ -57,6 +57,12 @@ _MBO_SPOKEN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Maximal runs, used after an MBO cue: digit groups joined by one space/hyphen; spoken digit words.
+_NUMERIC_RUN_RE = re.compile(r"(?<!\d)\d+(?:[ \-]\d+)*(?!\d)")
+_SPOKEN_RUN_RE = re.compile(
+    rf"\b(?:{_SPOKEN_WORD_ALT})(?:\s+(?:{_SPOKEN_WORD_ALT}))*\b", re.IGNORECASE
+)
+
 # MBO cues (matched on `_normalize`d text): a candidate counts as the MBO only when one of these
 # precedes it in the same sentence with at most 3 letter-only words in between.
 _MBO_CUES = (
@@ -228,42 +234,72 @@ class MboStrip(NamedTuple):
 
 
 def strip_mbo_from_text(text: str) -> MboStrip:
-    """Redact every 9-digit candidate (numeric or spoken) before the LLM call (E11-T1).
+    """Redact MBO candidates before the LLM call (E11-T1).
 
-    The MBO is assigned only from a candidate that an MBO cue labels, and only when exactly one
-    distinct cued value exists; otherwise it is `None` (flagged for the nurse). Candidates right
-    after `+385` / `00385` are phone numbers and stay in the text. Never log text or candidates.
+    A number after an MBO cue is redacted whole (maximal run, numeric or spoken) when it has 5 or
+    more digits; it becomes the MBO only with exactly 9 digits. Any invalid cued run, or two
+    different cued values, gives `None` (flagged for the nurse). Uncued 9-digit windows are
+    redacted but never become the MBO. Runs right after `+385` / `00385` are phones and stay.
+    Never log text, runs or values.
     """
-    candidates: list[tuple[int, int, str]] = []
-    for m in _MBO_DIGITS_RE.finditer(text):
-        digits = re.sub(r"\D", "", m.group(0))
-        if len(digits) == 9:
-            candidates.append((m.start(), m.end(), digits))
-    for m in _MBO_SPOKEN_RE.finditer(text):
-        digits = "".join(_SPOKEN_DIGITS[w] for w in m.group(0).lower().split())
-        if len(digits) == 9:
-            candidates.append((m.start(), m.end(), digits))
-    candidates.sort()
+    cued_runs: list[tuple[int, int, str]] = []
+    phone_runs: list[tuple[int, int]] = []
+    for regex, spoken in ((_NUMERIC_RUN_RE, False), (_SPOKEN_RUN_RE, True)):
+        for m in regex.finditer(text):
+            prefix = text[: m.start()]
+            if _PHONE_PREFIX_RE.search(prefix) or _starts_with_country_code(text, m.start()):
+                phone_runs.append((m.start(), m.end()))
+                continue
+            if not _MBO_CUE_RE.search(_normalize(prefix)):
+                continue
+            digits = _run_digits(m.group(0), spoken)
+            if len(digits) >= 5:
+                cued_runs.append((m.start(), m.end(), digits))
 
-    cued: set[str] = set()
+    # Uncued numbers keep a 9-digit-window rule on purpose: without a cue a mistyped 10-digit MBO
+    # is indistinguishable from a phone (`0915551234`), and redacting every long number would hide
+    # all mobile numbers from the LLM. The nurse sees and confirms the record.
+    protected = [(s, e) for s, e, _ in cued_runs] + phone_runs
+    windows: list[tuple[int, int]] = []
+    for regex, spoken in ((_MBO_DIGITS_RE, False), (_MBO_SPOKEN_RE, True)):
+        for m in regex.finditer(text):
+            if len(_run_digits(m.group(0), spoken)) != 9:
+                continue
+            if any(s < m.end() and m.start() < e for s, e in protected):
+                continue
+            windows.append((m.start(), m.end()))
+
+    spans = sorted([(s, e) for s, e, _ in cued_runs] + windows)
     parts: list[str] = []
     pos = 0
-    redacted = False
-    for start, end, digits in candidates:
+    for start, end in spans:
         if start < pos:
             continue
-        prefix = text[:start]
-        if _PHONE_PREFIX_RE.search(prefix):
-            continue
-        if _MBO_CUE_RE.search(_normalize(prefix)):
-            cued.add(digits)
         parts.append(text[pos:start])
         parts.append("[MBO_REDACTED]")
         pos = end
-        redacted = True
     parts.append(text[pos:])
-    mbo = next(iter(cued)) if len(cued) == 1 else None
-    return MboStrip("".join(parts), mbo, redacted)
+
+    values = {d for _, _, d in cued_runs}
+    all_valid = all(len(d) == 9 for d in values)
+    mbo = next(iter(values)) if len(values) == 1 and all_valid else None
+    return MboStrip("".join(parts), mbo, bool(spans))
+
+
+def _starts_with_country_code(text: str, start: int) -> bool:
+    if text.startswith("00385", start):
+        return True
+    return (
+        text.startswith("385", start)
+        and text[start + 3 : start + 4] in (" ", "-")
+        and (text[start - 1 : start] == "+" if start else False)
+    )
+
+
+def _run_digits(run: str, spoken: bool) -> str:
+    if spoken:
+        return "".join(_SPOKEN_DIGITS[w] for w in run.lower().split())
+    return re.sub(r"\D", "", run)
 
 
 def _canon_text(text: str) -> str:
