@@ -3,6 +3,20 @@
 # SINTETIČKI NACRT: sve vrijednosti su procjene, ne klinički podaci.
 # Ključevi su engleski (kod), natpisi hrvatski (sučelje).
 
+mobility_classes:
+  - key: walks
+    label: Hoda
+    boarding_time_min: 3
+  - key: cane
+    label: Štap
+    boarding_time_min: 5
+  - key: wheelchair
+    label: Kolica
+    boarding_time_min: 10
+  - key: stretcher
+    label: Nosila
+    boarding_time_min: 15
+
 departments:
   - key: internal_medicine
     label: Interna medicina
@@ -20,8 +34,10 @@ departments:
     label: Onkologija
   - key: dialysis
     label: Dijaliza
-# REVIEW: provjeriti koje djelatnosti Opća bolnica Gospić zaista ima (osobito dijalizu i onkologiju);
-#         popis je veličine za demo, ne preslika bolnice.
+# Popis vrijedi za sve ustanove (OB Gospić, KBC Rijeka, KBC Zagreb), ne samo za OB Gospić.
+# OB Gospić ima sve navedene djelatnosti osim onkologije (ondje radi samo koordinator skrbi);
+# onkološki pregledi zato idu u KBC. Izvor: sažetak djelatnosti OB Gospić (AI sažetak, potvrditi
+# na stranici bolnice). Popis je veličine za demo, ne preslika bolnice.
 
 visit_types:
   - key: first_visit

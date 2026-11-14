@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.codebooks import Codebooks, get_codebooks
 from app.config import get_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -45,7 +46,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         except SQLAlchemyError as exc:
             # Do not include the exception text: it can contain the connection URL.
             raise StartupCheckError(
-                f"Database is unreachable ({type(exc).__name__}); check DATABASE_URL and that the db service is up"
+                f"Database is unreachable ({type(exc).__name__}); "
+                "check DATABASE_URL and that the db service is up"
             ) from None
         logger.info("PostGIS %s detected", version)
     yield
@@ -57,3 +59,8 @@ app = FastAPI(title="OptiCare", lifespan=lifespan)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/codebooks", response_model=Codebooks)
+def read_codebooks() -> Codebooks:
+    return get_codebooks()

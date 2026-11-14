@@ -1,0 +1,31 @@
+# Linije Lika Line kao opcija javnog prijevoza (E1-T3).
+# Lika Line je stvarna županijska mreža (23 linije u četiri zone), ali SU OVDJE TRASE I POLASCI NACRT:
+# odabrane su tri linije koje povezuju naselja iz demo profila s Gospićem.
+# REVIEW: provjeriti stvarne linije, stanice i vozni red prije nego se prikažu korisniku.
+#
+# Linija NIJE vozilo: autobus vozi fiksnom trasom po voznom redu, ne dolazi pred kuću i planer ga ne
+# raspoređuje. Služi kao informacija da pokretan pacijent može ići autobusom (uz putni nalog).
+# stops: naselja redom od polazišta prema Gospiću; povratak ide obrnutim redom.
+# to_gospic: polasci s prve stanice; from_gospic: polasci iz Gospića. Vrijeme je Europe/Zagreb.
+
+lines:
+  - key: udbina_gospic
+    label: Donji Lapac – Udbina – Gospić
+    stops: [Donji Lapac, Udbina, Gospić]
+    to_gospic: ["06:00"]
+    from_gospic: ["14:30"]
+    weekdays_only: true
+
+  - key: brinje_gospic
+    label: Brinje – Otočac – Perušić – Gospić
+    stops: [Brinje, Otočac, Perušić, Gospić]
+    to_gospic: ["06:15", "11:00"]
+    from_gospic: ["13:00", "15:30"]
+    weekdays_only: true
+
+  - key: lovinac_gospic
+    label: Lovinac – Gospić
+    stops: [Lovinac, Gospić]
+    to_gospic: ["06:45"]
+    from_gospic: ["14:00"]
+    weekdays_only: true

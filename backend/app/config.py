@@ -6,7 +6,8 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root: backend/app/config.py -> parents[2]
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = REPO_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -27,6 +28,9 @@ class Settings(BaseSettings):
 
     geocoding_backend: Literal["mock"] = "mock"
     sms_backend: Literal["mock"] = "mock"
+
+    # Domain data (YAML codebooks); /data in Docker.
+    data_dir: Path = REPO_ROOT / "data"
 
     check_db_on_startup: bool = True
 
