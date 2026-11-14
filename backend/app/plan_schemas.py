@@ -54,6 +54,9 @@ class UnservedReason(StrEnum):
     MAX_RIDE_TIME = "max_ride_time"
     LOCATION_MISSING = "location_missing"
     SOLVER_TIMEOUT = "solver_timeout"
+    # Immobile patient (wheelchair/stretcher) without the sanitetski entitlement and no other
+    # vehicle can take them; the nurse asks the chosen doctor for the order (rule 8).
+    SANITETSKI_ORDER_NEEDED = "sanitetski_order_needed"
 
 
 class Estimate(BaseModel):
