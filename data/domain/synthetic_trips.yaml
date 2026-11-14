@@ -74,19 +74,38 @@ patient_context:
     2: 0.09
     3: 0.05
     4: 0.02
-  elevator_prob_if_floor_ge_2: 0.25
+  elevator_prob_if_upper_floor: 0.25   # vjerojatnost lifta za kat >= 1; prizemlje nema lift
   companion_prob_by_mobility:
     walks: 0.15
     cane: 0.35
     wheelchair: 0.65
     stretcher: 0.80
 
+# Početak vožnje (dolazak pred vrata) unutar dana, po zagrebačkom lokalnom vremenu.
+# Sati od earliest_hour do latest_hour (uključivo), minute u koracima minute_step: 06:00 do 11:50.
+# REVIEW: stvarni raspored jutarnjih polazaka (dijaliza obično rano ujutro).
+start_window:
+  earliest_hour: 6
+  latest_hour: 11
+  minute_step: 10
+
 # Cestovna udaljenost u jednom smjeru (km) i prosječna brzina za izračun vremena vožnje.
 # Stvarne udaljenosti do OB Gospić: Smiljan/Lički Osik/Perušić 6-15 km, Otočac/Udbina/Korenica 45-57 km,
 # Donji Lapac 75-80 km, Novalja/Senj ~85-87 km; do KBC Rijeka / KBC Zagreb 110-215 km.
+# OB Gospić ima sve odjele osim onkologije; onkologija ide u KBC (vanjski pojas).
 drive:
   mean_speed_kmh: 55.0
+  # Faktor kojim se množi vrijeme vožnje (promet, cesta, godišnje doba).
+  # REVIEW: raspon varijacije brzine.
+  speed_jitter: {min: 0.9, max: 1.2}
+  min_drive_min: 5.0           # najkraće vrijeme vožnje u jednom smjeru (minute)
+  # Čekanje vozila nakon pregleda prije povratka kući (minute).
+  # REVIEW: tipično čekanje na povratak.
+  return_wait_min: {min: 5.0, max: 20.0}
+  # Odjeli koji uvijek idu u vanjsku ustanovu (KBC) i koriste samo vanjski pojas.
+  external_departments: [oncology]
+  external_band_km: {min: 110.0, max: 220.0}   # KBC Rijeka i KBC Zagreb
+  # Ostali odjeli biraju samo među ovim pojasevima, prema težini.
   distance_bands_km:
-    local:     {min: 3.0,   max: 18.0,  weight: 0.35}  # Gospić, Smiljan, Lički Osik, Perušić
-    regional:  {min: 18.0,  max: 90.0,  weight: 0.50}  # Otočac, Udbina, Korenica, D. Lapac, Senj, Novalja
-    external:  {min: 110.0, max: 220.0, weight: 0.15}  # KBC Rijeka i KBC Zagreb (npr. onkologija)
+    local:     {min: 3.0,  max: 18.0, weight: 0.35}  # Gospić, Smiljan, Lički Osik, Perušić
+    regional:  {min: 18.0, max: 90.0, weight: 0.50}  # Otočac, Udbina, Korenica, D. Lapac, Senj, Novalja

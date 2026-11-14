@@ -10,7 +10,7 @@ Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je 
 | `lika_line.yaml` | nekoliko linija Lika Line kao opcija javnog prijevoza (trasa i polasci) | E1-T3; kasnije planer i prijedlog putnog naloga |
 | `urgency_and_durations.yaml` | djelatnosti, vrste pregleda, klase hitnosti, trajanje pregleda (medijan i 90. percentil), vrijeme ukrcaja | E1-T2 (šifrarnici), E4-T2 (zadana pravila) |
 | `scoring_factors.yaml` | faktori bodovanja, težine, pojasevi i razine usluge | E3-T1 (bodovi potrebe za podrškom) |
-| `synthetic_trips.yaml` | parametri raspodjela za generator povijesnih vožnji (`TripLog`) | E1-T4 (generator sintetičkih vožnji) |
+| `synthetic_trips.yaml` | parametri raspodjela za generator povijesnih vožnji (`TripLog`); `python -m app.seed` ga uvijek pokreće | E1-T4 (generator sintetičkih vožnji) |
 | `hzzo_rules.yaml` | pravila HZZO-a: sanitetski prijevoz, putni nalog (prag 50 km, iznimke), tko izdaje nalog, izvori | E3-T2 (provjera prava na prijevoz) |
 
 ## Načela
