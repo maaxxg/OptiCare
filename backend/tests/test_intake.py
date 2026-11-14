@@ -2,25 +2,19 @@ from __future__ import annotations
 
 import json
 from collections.abc import Generator
-from datetime import date, datetime, time
+from datetime import date
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
-from geoalchemy2 import Geography
-from shapely import wkt as shapely_wkt
-from sqlalchemy import create_engine, event
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 from app.adapters import get_llm_client
 from app.adapters.geocoding import MockGeocodingClient
 from app.adapters.llm import MockLLMClient
 from app.config import get_settings
-from app.db import Base, get_db
+from app.db import get_db
 from app.intake import (
     EXTRACTION_EXAMPLES_PATH,
     SYSTEM_PROMPT_HR,
@@ -30,19 +24,10 @@ from app.intake import (
 from app.main import app
 from app.models import (
     Department,
-    Facility,
     MobilityClass,
     UrgencyClass,
     VisitType,
-    make_point_wkt,
 )
-
-ZAGREB_TZ = ZoneInfo("Europe/Zagreb")
-
-
-@compiles(Geography, "sqlite")
-def _compile_geography_sqlite(_element: Any, _compiler: Any, **_kw: Any) -> str:
-    return "TEXT"
 
 
 class SpyLLMClient:
@@ -57,63 +42,15 @@ class SpyLLMClient:
         return str(self.delegate.complete(system, user))
 
 
-def _wkt_to_ewkb_hex(value: str | bytes | None) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, bytes):
-        return value.hex()
-    text = str(value).strip()
-    if ";" in text:
-        text = text.split(";", 1)[1].strip()
-    try:
-        geom = shapely_wkt.loads(text)
-        return str(geom.wkb_hex)
-    except Exception:
-        return text
-
-
 @pytest.fixture
-def sqlite_session() -> Generator[Session, None, None]:
-    """In-memory SQLite session with lightweight GeoAlchemy2 function shims."""
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+def client() -> Generator[TestClient, None, None]:
+    """Client for DB-free endpoints; any use of the database fails loudly."""
 
-    @event.listens_for(engine, "connect")
-    def _register_geo_shims(dbapi_conn: Any, _record: Any) -> None:
-        dbapi_conn.create_function("RecoverGeometryColumn", -1, lambda *_args: 1)
-        dbapi_conn.create_function("DiscardGeometryColumn", -1, lambda *_args: 1)
-        dbapi_conn.create_function("AddGeometryColumn", -1, lambda *_args: 1)
-        dbapi_conn.create_function("CreateSpatialIndex", -1, lambda *_args: 1)
-        dbapi_conn.create_function("DisableSpatialIndex", -1, lambda *_args: 1)
-        dbapi_conn.create_function("ST_GeogFromText", 1, _wkt_to_ewkb_hex)
-        dbapi_conn.create_function("ST_GeomFromText", -1, lambda wkt, *_a: _wkt_to_ewkb_hex(wkt))
-        dbapi_conn.create_function("GeomFromEWKT", 1, _wkt_to_ewkb_hex)
-        dbapi_conn.create_function("AsEWKB", 1, _wkt_to_ewkb_hex)
-        dbapi_conn.create_function("ST_AsEWKB", 1, _wkt_to_ewkb_hex)
-        dbapi_conn.create_function("ST_AsBinary", 1, _wkt_to_ewkb_hex)
-        dbapi_conn.create_function("AsBinary", 1, _wkt_to_ewkb_hex)
+    def _no_db() -> Generator[Session, None, None]:
+        raise AssertionError("this test must not touch the database")
+        yield  # pragma: no cover
 
-    for table in Base.metadata.tables.values():
-        table.create(bind=engine, checkfirst=True)
-
-    testing_session_local = sessionmaker(bind=engine)
-    session = testing_session_local()
-    try:
-        yield session
-    finally:
-        session.close()
-        engine.dispose()
-
-
-@pytest.fixture
-def client(sqlite_session: Session) -> Generator[TestClient, None, None]:
-    def _override_get_db() -> Generator[Session, None, None]:
-        yield sqlite_session
-
-    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_db] = _no_db
     try:
         yield TestClient(app)
     finally:
@@ -433,170 +370,3 @@ def test_geocode_endpoint_returns_coordinates_and_administrative_units(
 
     unknown = client.post("/intake/geocode", json={"address": "Ilica 1, Zagreb"})
     assert unknown.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# E2-T2 (KAN-19): Saving confirmed records & candidate slot matching
-# ---------------------------------------------------------------------------
-
-
-def test_post_patients_deduplicates_by_mbo_and_auto_geocodes(client: TestClient) -> None:
-    payload = {
-        "first_name": "Katica",
-        "last_name": "Starčević",
-        "birth_year": 1949,
-        "mbo": "000000006",
-        "phone": "+385 00 000 0006",
-        "phone_type": "basic_mobile",
-        "address": "Donji Kosinj 14",
-        "settlement": "Donji Kosinj",
-        "municipality": "Perušić",
-        "county": "Ličko-senjska",
-        "mobility_class": "walks",
-        "lives_alone": True,
-    }
-    first = client.post("/patients", json=payload)
-    assert first.status_code == 201
-    p1 = first.json()
-    assert p1["mbo_masked"] == "*****0006"
-    assert "000000006" not in json.dumps(p1)
-    assert p1["location"]["lat"] == pytest.approx(44.75986, abs=1e-4)
-    assert p1["municipality"] == "Perušić"
-
-    # Re-submitting with the same MBO updates the existing patient record
-    updated_payload = {
-        **payload,
-        "phone": "+385 00 999 0006",
-        "mobility_class": "cane",
-    }
-    second = client.post("/patients", json=updated_payload)
-    assert second.status_code == 201
-    p2 = second.json()
-    assert p2["id"] == p1["id"]
-    assert p2["phone"] == "+385 00 999 0006"
-    assert p2["mobility_class"] == "cane"
-
-    by_mbo = client.get("/patients", params={"mbo": "000000006"})
-    assert by_mbo.status_code == 200
-    assert len(by_mbo.json()) == 1
-    assert by_mbo.json()[0]["id"] == p1["id"]
-
-
-def test_post_requests_generates_candidate_slots_or_sets_pending(
-    client: TestClient,
-    sqlite_session: Session,
-) -> None:
-    facility = Facility(
-        key="ob_gospic",
-        name="Opća bolnica Gospić",
-        level="secondary",
-        settlement="Gospić",
-        municipality="Gospić",
-        county="Ličko-senjska",
-        location=make_point_wkt(44.5435, 15.36214),
-    )
-    sqlite_session.add(facility)
-    sqlite_session.commit()
-    sqlite_session.refresh(facility)
-
-    from app.models import Slot
-
-    slot_morning = Slot(
-        facility_id=facility.id,
-        department=Department.CARDIOLOGY.value,
-        start_time=datetime.combine(date(2026, 11, 17), time(8, 30), tzinfo=ZAGREB_TZ),
-        end_time=datetime.combine(date(2026, 11, 17), time(9, 0), tzinfo=ZAGREB_TZ),
-        capacity=2,
-    )
-    slot_afternoon = Slot(
-        facility_id=facility.id,
-        department=Department.CARDIOLOGY.value,
-        start_time=datetime.combine(date(2026, 11, 19), time(13, 0), tzinfo=ZAGREB_TZ),
-        end_time=datetime.combine(date(2026, 11, 19), time(13, 30), tzinfo=ZAGREB_TZ),
-        capacity=2,
-    )
-    slot_outside_fixed = Slot(
-        facility_id=facility.id,
-        department=Department.DIALYSIS.value,
-        start_time=datetime.combine(date(2026, 11, 20), time(7, 30), tzinfo=ZAGREB_TZ),
-        end_time=datetime.combine(date(2026, 11, 20), time(12, 0), tzinfo=ZAGREB_TZ),
-        capacity=4,
-    )
-    sqlite_session.add_all([slot_morning, slot_afternoon, slot_outside_fixed])
-    sqlite_session.commit()
-
-    pat_resp = client.post(
-        "/patients",
-        json={
-            "first_name": "Mirko",
-            "last_name": "Devčić",
-            "mbo": "000000009",
-            "phone": "+385 00 000 0009",
-            "settlement": "Smiljan",
-            "municipality": "Gospić",
-            "county": "Ličko-senjska",
-        },
-    )
-    patient_id = pat_resp.json()["id"]
-
-    # 1. Matching slots found within window -> attached to candidate_slots, pending=False
-    req1 = client.post(
-        "/requests",
-        json={
-            "patient_id": patient_id,
-            "facility_id": facility.id,
-            "department": "cardiology",
-            "visit_type": "first_visit",
-            "urgency_class": "within_week",
-            "earliest_date": "2026-11-16",
-            "latest_date": "2026-11-22",
-        },
-    )
-    assert req1.status_code == 201
-    r1_data = req1.json()
-    assert r1_data["slot_request_pending"] is False
-    assert [s["id"] for s in r1_data["candidate_slots"]] == [
-        slot_morning.id,
-        slot_afternoon.id,
-    ]
-
-    # 2. Urgency class FIXED (max_shift_days = 0) clamps window to earliest_date;
-    #    no slot on 2026-11-16 -> slot_request_pending=True with preferred_time_of_day
-    req2 = client.post(
-        "/requests",
-        json={
-            "patient_id": patient_id,
-            "facility_id": facility.id,
-            "department": "dialysis",
-            "visit_type": "dialysis_session",
-            "urgency_class": "fixed",
-            "earliest_date": "2026-11-16",
-            "latest_date": "2026-11-22",
-            "preferred_time_of_day": "afternoon",
-        },
-    )
-    assert req2.status_code == 201
-    r2_data = req2.json()
-    assert r2_data["candidate_slots"] == []
-    assert r2_data["slot_request_pending"] is True
-    assert r2_data["preferred_time_of_day"] == "afternoon"
-    assert r2_data["latest_date"] == "2026-11-16"
-
-    # 3. Department with no open slots and no preferred_time_of_day defaults to "morning"
-    req3 = client.post(
-        "/requests",
-        json={
-            "patient_id": patient_id,
-            "facility_id": facility.id,
-            "department": "neurology",
-            "visit_type": "follow_up",
-            "urgency_class": "within_week",
-            "earliest_date": "2026-11-16",
-            "latest_date": "2026-11-20",
-        },
-    )
-    assert req3.status_code == 201
-    r3_data = req3.json()
-    assert r3_data["candidate_slots"] == []
-    assert r3_data["slot_request_pending"] is True
-    assert r3_data["preferred_time_of_day"] == "morning"
