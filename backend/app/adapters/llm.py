@@ -18,7 +18,7 @@ class MockLLMClient:
         if self.response != "{}":
             return self.response
         if '"patient"' in system and '"visit_request"' in system:
-            from app.intake import offline_extract_json
+            from app.intake import offline_answer
 
-            return offline_extract_json(user)
+            return offline_answer(user)
         return self.response

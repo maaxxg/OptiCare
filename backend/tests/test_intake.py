@@ -17,8 +17,10 @@ from app.config import get_settings
 from app.db import get_db
 from app.intake import (
     EXTRACTION_EXAMPLES_PATH,
+    REQUIRED_REVIEW_FIELDS,
     SYSTEM_PROMPT_HR,
     extract_intake,
+    offline_answer,
     strip_mbo_from_text,
 )
 from app.main import app
@@ -209,7 +211,7 @@ def test_uncued_number_sets_mbo_stripped_but_not_mbo() -> None:
 def test_all_extraction_examples_mbo_from_cue_and_never_sent_to_llm() -> None:
     path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
     examples = yaml.safe_load(path.read_text(encoding="utf-8"))["examples"]
-    assert len(examples) >= 34
+    assert len(examples) >= 35
     for ex in examples:
         expected = ex.get("mbo_in_text")
         sanitized, mbo, _ = strip_mbo_from_text(str(ex["text"]))
@@ -271,11 +273,11 @@ def test_croatian_prompt_examples_do_not_guess() -> None:
         assert patient.missed_visits_last_year is None
 
 
-def test_all_34_extraction_examples_from_domain_yaml() -> None:
+def test_all_35_extraction_examples_from_domain_yaml() -> None:
     path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     examples = data["examples"]
-    assert len(examples) == 34
+    assert len(examples) == 35
 
     geo = MockGeocodingClient()
     for item in examples:
@@ -312,7 +314,23 @@ def test_all_34_extraction_examples_from_domain_yaml() -> None:
 
 
 def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestClient) -> None:
-    spy = SpyLLMClient()
+    llm_json = json.dumps(
+        {
+            "patient": {
+                "settlement": "Senj",
+                "mobility_class": "stretcher",
+                "floor": 1,
+                "elevator": False,
+                "companion": True,
+            },
+            "visit_request": {
+                "department": "radiology",
+                "visit_type": "procedure_test",
+                "urgency_class": "within_few_days",
+            },
+        }
+    )
+    spy = SpyLLMClient(delegate=MockLLMClient(response=llm_json))
     app.dependency_overrides[get_llm_client] = lambda: spy
 
     resp = client.post(
@@ -350,6 +368,45 @@ def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestCli
     assert "phone" in body["for_review"]
     assert "earliest_date" in body["for_review"]
     assert "latest_date" in body["for_review"]
+
+
+def test_offline_answer_is_canned_only() -> None:
+    examples = yaml.safe_load(
+        (get_settings().data_dir / EXTRACTION_EXAMPLES_PATH).read_text(encoding="utf-8")
+    )["examples"]
+    with_mbo = next(e for e in examples if e.get("mbo_in_text"))
+    for text in (with_mbo["text"], strip_mbo_from_text(with_mbo["text"]).text):
+        canned = json.loads(offline_answer(text))
+        assert canned["patient"]["first_name"] == with_mbo["expected"]["first_name"]
+        assert "mbo" not in canned["patient"]
+        assert with_mbo["mbo_in_text"] not in offline_answer(text)
+
+    assert offline_answer("Nešto potpuno neprogramirano, Marko Marić iz Senja.") == "{}"
+    result = extract_intake(
+        "Nešto potpuno neprogramirano, Marko Marić iz Senja.",
+        llm_client=MockLLMClient(),
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert {name for _, name in REQUIRED_REVIEW_FIELDS} <= set(result.for_review)
+    assert result.patient.first_name is None
+    assert result.patient.settlement is None
+
+
+def test_e2_acceptance_sentence_with_mock_llm() -> None:
+    result = extract_intake(
+        "Živim sama u Donjem Selu, hodam sa štapom, kćer dolazi samo utorkom, "
+        "imam kontrolu kod kardiologa.",
+        llm_client=MockLLMClient(),
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert result.patient.mobility_class == MobilityClass.CANE
+    assert result.patient.lives_alone is True
+    assert result.patient.settlement == "Donje Selo"
+    assert result.patient.companion is None
+    assert result.visit_request.department == Department.CARDIOLOGY
+    assert result.visit_request.visit_type == VisitType.FOLLOW_UP
+    for field in ("first_name", "last_name", "mbo", "phone", "urgency_class"):
+        assert field in result.for_review
 
 
 def test_extract_intake_rejects_invalid_llm_enums_into_for_review() -> None:
