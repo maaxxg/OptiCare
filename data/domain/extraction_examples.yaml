@@ -1,0 +1,693 @@
+# Primjeri rečenica pacijenata s očekivanim izdvajanjem (E13-T5). Ulaz za E2-T4.
+# Izvor: dokument domenske članice tima (50 rečenica), očišćen i dopunjen:
+#   - izbačeni gotovo duplikati, ispravljene pogreške i proturječja (vidi `source` i komentare)
+#   - dio primjera prepisan u neuređen govor (izmiješan redoslijed, ispravci, razgovorni izrazi)
+#   - dodani primjeri s djelatnošću, hitnošću, datumom, dijelom dana, telefonom, katom i liftom,
+#     pacijentom-vozačem, privolom za zajedničku vožnju, MBO-om i podacima koji nedostaju
+# SVE JE SINTETIČKO: imena su izmišljena, MBO i telefoni očito lažni, nema ulica.
+#
+# PRAVILA ZA OČEKIVANE VRIJEDNOSTI
+# - Polje koje NIJE navedeno u `expected` znači: u tekstu nije rečeno. Izdvajanje mora vratiti null
+#   i staviti polje na popis "za provjeru" (pravilo 5: ne pogađa se).
+# - `review`: polja kojima je vrijednost zadana, ali je nesigurna; izdvajanje ih mora i označiti.
+# - `mbo_in_text`: MBO izgovoren u tekstu. Uklanja se PRIJE poziva LLM-a (pravilo 3); test provjerava
+#   da tekst poslan LLM-u ne sadrži te znamenke. MBO nije polje koje LLM izdvaja.
+# - Uvijek se izdvajaju podaci PACIJENTA, i kad zove netko drugi (kći, supruga, susjeda).
+# - `reference_date` je "danas" za izračun godine rođenja i datuma ("osamnaestog", "ovaj tjedan").
+#
+# ZNAČENJE POLJA (kako ih procjenjuje skripta iz E2-T4)
+# - birth_year: reference_date.year minus navršene godine; skripta prihvaća odstupanje ±1.
+#   "Meni je sedamdeset četvrta godina" znači 73 navršene godine (74. godina života počinje
+#   73. rođendanom). U razgovoru se redni broj ponekad koristi i za navršene godine; razlika je
+#   točno 1, pa je pokriva tolerancija ±1, a review ostaje da sestra provjeri.
+# - settlement: mjesto kako je rečeno (normalizirano ime naselja). Općinu i županiju daje
+#   geokodiranje (E2-T3), ne LLM, pa nisu ovdje. "Selo kod X" -> settlement X + review.
+# - lives_alone: živi sam u kućanstvu. "Živimo sami, nas dvoje" -> false.
+# - companion: netko ide s pacijentom na OVAJ pregled.
+# - own_car: pacijent ima auto kojim SAM može doći na ovaj pregled. Auto u kvaru ili zabrana
+#   vožnje -> false (uz review kad auto postoji, ali se ne smije voziti).
+# - mobility_class: walks, cane (štap, štake, hodalica), wheelchair, stretcher (leži, nosila).
+#   Štake idu u cane kao i štap: ISO 9999 ih svrstava u istu skupinu (12 03, pomagala za hodanje
+#   kojima se rukuje jednom rukom). Privremene štake (gips) dobivaju review.
+# - carpool_driver_seats: koliko drugih pacijenata vozač nudi povesti; carpool_rider_consent:
+#   pacijent pristaje ići s drugim pacijentom-vozačem.
+# - missed_visits_last_year: propušteni pregledi u zadnjih 12 mjeseci ("lani", "ove godine",
+#   "prošle godine" se broje). Broj bez vremenskog okvira -> vrijednost + review.
+# - phone_type: landline (kućni/fiksni), basic_mobile (mobitel na tipke), smartphone.
+# - department, visit_type, urgency_class: ključevi iz urgency_and_durations.yaml.
+#   "Specijalist" bez djelatnosti -> department null.
+# - preferred_time_of_day: morning ili afternoon (šifrarnik `times_of_day` u urgency_and_durations.yaml;
+#   granica je 12:00). "Ujutro", "prijepodne" -> morning; "poslije podne", "popodne" -> afternoon.
+# - recurrence: npr. 3x_weekly (kao u patient_profiles.yaml).
+# - earliest_date / latest_date: samo kad je datum ili rok izričito rečen.
+
+reference_date: 2026-11-16   # ponedjeljak
+
+examples:
+  - id: e01
+    source: "E13-T5 #1 (prepisano u neuređen govor)"
+    tags: [cane, lives_alone, department]
+    text: >-
+      Dobar dan, Ruža Ružić, iz Udbine. Trebala bi na kontrolu kod očnog, doktorica mi je dala
+      uputnicu. Hodam sa štapom, polako, sama sam u kući otkad mi je muž umro. Auta nemam, a ni
+      dozvolu nisam nikad imala. Djeca su u Zagrebu, nema tko sa mnom. Sedamdeset dvije mi je.
+      Nisam do sad nikad propustila pregled, nikad.
+    expected:
+      first_name: Ruža
+      last_name: Ružić
+      birth_year: 1954
+      settlement: Udbina
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 0
+      department: ophthalmology
+      visit_type: follow_up
+
+  - id: e02
+    source: "E13-T5 #2 (izvorni oblik; ispravljeno proturječje 'živim sam' i 'supruga')"
+    tags: [baseline, birth_year_spoken, own_car]
+    text: >-
+      Zovem vas iz Korenice. Rođen sam tisuću devetsto pedeset i osme. Potpuno sam pokretan i
+      hodam bez ikakvih pomagala. Živim sa suprugom. Imam ispravan auto u dvorištu i vozim bez
+      problema. Idem sam na pregled jer supruga mora čuvati unuke. Prošle godine sam jednom
+      zakasnio i propustio kontrolu.
+    expected:
+      birth_year: 1958
+      settlement: Korenica
+      mobility_class: walks
+      lives_alone: false
+      companion: false
+      own_car: true
+      missed_visits_last_year: 1
+
+  - id: e03
+    source: "E13-T5 #3 (zove supruga)"
+    tags: [caller_not_patient, wheelchair, urgency]
+    text: >-
+      Zovem za muža, Mile Milić, on je u kolicima već tri godine. Mi smo iz Vrhovina. Ima
+      osamdeset dvije. Ja sam s njim doma, ja ću i ići s njim, samo nas treba netko odvest jer
+      auta nemamo. Na kontrolu kod kardiologa, doktor je rekao unutar mjesec dana. Nije nikad
+      propustio, uvijek nas je susjed vozio.
+    expected:
+      first_name: Mile
+      last_name: Milić
+      birth_year: 1944
+      settlement: Vrhovine
+      mobility_class: wheelchair
+      lives_alone: false
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+      department: cardiology
+      visit_type: follow_up
+      urgency_class: within_month
+
+  - id: e04
+    source: "E13-T5 #4 i #44 (spojeno)"
+    tags: [ordinal_age, dialect, cane]
+    text: >-
+      A ja sam iz Perušića. Meni je sedamdeset prva godina. Kuk me boli, idem na kontrolu na
+      ortopediju, za kuk. Sa štapom mogu, al polako. Živim sa sinom, al on radi u tri smjene u
+      šumariji, neće moć sa mnom. Auta nemam, nisam ni polagala. Lani mi je već jedna kontrola
+      propala.
+    expected:
+      birth_year: 1956
+      settlement: Perušić
+      mobility_class: cane
+      lives_alone: false
+      companion: false
+      own_car: false
+      missed_visits_last_year: 1
+      department: orthopaedics
+      visit_type: follow_up
+    review: [birth_year]   # "sedamdeset prva godina" = 70 navršenih
+
+  - id: e05
+    source: "E13-T5 #5 i #48 (spojeno)"
+    tags: [vague_address, missed_visits]
+    text: >-
+      Ja sam iz jednog malog sela kod Lovinca, ne znam vam ni objasnit, iza crkve skroz gore.
+      Šezdeset šest mi je. Hodam sama, dobro, hvala Bogu. Sama sam otkad mi je muž umro. Nema
+      auta, a u selu nema ko da me poveze. Nemam nikoga ni da ide sa mnom. Dvaput sam ove godine
+      propustila pregled u bolnici jer nisam imala kako.
+    expected:
+      birth_year: 1960
+      settlement: Lovinac
+      mobility_class: walks
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 2
+    review: [settlement]   # naselje nije imenovano, samo "kod Lovinca"
+
+  - id: e06
+    source: "E13-T5 #6 (ispravljeno 'hodočastim' u 'hodam'; dodan pacijent-vozač)"
+    tags: [patient_driver, phone_type, own_car]
+    text: >-
+      Javljam se iz Donjeg Lapca, Đuro Đurić. Sedamdeset četiri godine, ali hodam ko mladić, bez
+      ičega. Živim sam u kući. Imam auto i vozim, na kontrolu ću sam doć, samo mi treba termin. A
+      ako treba, mogu i nekoga usput povest, imam mjesta za još dvoje. Pošaljite mi poruku na
+      mobitel, imam onaj pametni. Nisam nikad propustio pregled.
+    expected:
+      first_name: Đuro
+      last_name: Đurić
+      birth_year: 1952
+      settlement: Donji Lapac
+      phone_type: smartphone
+      mobility_class: walks
+      lives_alone: true
+      companion: false
+      own_car: true
+      carpool_driver_seats: 2
+      missed_visits_last_year: 0
+      visit_type: follow_up
+
+  - id: e07
+    source: "E13-T5 #7 (zove kći, njezino ime nije ime pacijenta)"
+    tags: [caller_not_patient, stretcher, urgency]
+    text: >-
+      Ovdje Snježana, zovem iz Novalje za tatu, Ante Antić. Ima osamdeset sedam, leži, ne može se
+      uopće dić, samo na nosilima. Živimo zajedno. Auta nemamo, a ja ionako ne vozim, ali ja idem
+      s njim obavezno. Treba na neurologiju u Gospić, doktor kaže u roku od tjedan dana. Nije
+      nikad propustio.
+    expected:
+      first_name: Ante
+      last_name: Antić
+      birth_year: 1939
+      settlement: Novalja
+      mobility_class: stretcher
+      lives_alone: false
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+      department: neurology
+      urgency_class: within_week
+
+  - id: e08
+    source: "E13-T5 #8 (dodan MBO)"
+    tags: [mbo, cane, dialect]
+    text: >-
+      Mate Matić, iz Brinja. Da vam odmah dam MBO, 000 000 301. Hodam jako sporo, samo sa štapom.
+      Sam sam, nikog nemam doma. Nemam ni auto ni vozačku. Lani mi je propao jedan pregled jer
+      nisam imo prijevoz. Sedamdeset i pet mi je.
+    mbo_in_text: "000000301"
+    expected:
+      first_name: Mate
+      last_name: Matić
+      birth_year: 1951
+      settlement: Brinje
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 1
+
+  - id: e09
+    source: "E13-T5 #9 (dodani telefon i dio dana)"
+    tags: [phone_type, time_of_day, missing_field]
+    text: >-
+      Zovem iz Senja. Imam pedeset četiri godine, hodam normalno, bez ičega. Živim s kćeri i
+      njezinom obitelji, ali svi oni rade u Rijeci pa moram ić sama. Auta nemam, vozačku isto ne.
+      Na očni trebam, kontrola. Ujutro nikako, samo poslije podne ako može. Zovite me na kućni,
+      mobitel nemam.
+    expected:
+      birth_year: 1972
+      settlement: Senj
+      phone_type: landline
+      mobility_class: walks
+      lives_alone: false
+      companion: false
+      own_car: false
+      department: ophthalmology
+      visit_type: follow_up
+      preferred_time_of_day: afternoon
+
+  - id: e10
+    source: "E13-T5 #10"
+    tags: [first_name_only, first_visit]
+    text: >-
+      Ja sam baka Anka iz Krasna. Osamdeset šest mi je, ali hodam sama, sve sama. Živim sama.
+      Auta nemam, nikad nisam ni vozila. Sin je daleko, radi, pa moram sama. Prvi put idem kod tog
+      specijaliste, za srce, doktorica mi je pisala uputnicu.
+    expected:
+      first_name: Anka
+      birth_year: 1940
+      settlement: Krasno
+      mobility_class: walks
+      lives_alone: true
+      companion: false
+      own_car: false
+      department: cardiology
+      visit_type: first_visit
+
+  - id: e11
+    source: "E13-T5 #11 (dodani kat i lift)"
+    tags: [ordinal_age, floor, colloquial]
+    text: >-
+      Iz Karlobaga sam. Meni je sedamdeset četvrta. Hodam normalno, fala Bogu. Sam sam u stanu,
+      drugi kat, lifta nema, al mogu ja stepenice. Nemam auto ni vozački. Nemam nikog blizu da me
+      poveze. Lani sam fulao pregled jer nisam imo kako preko Velebita.
+    expected:
+      birth_year: 1953
+      settlement: Karlobag
+      mobility_class: walks
+      lives_alone: true
+      companion: false
+      floor: 2
+      elevator: false
+      own_car: false
+      missed_visits_last_year: 1
+    review: [birth_year]   # "sedamdeset četvrta" = 73 navršene
+
+  - id: e12
+    source: "E13-T5 #12 (izvorni oblik; zamjenjuje i #16, #24, #50)"
+    tags: [baseline, own_car]
+    text: >-
+      Iz Ličkog Osika sam. Imam šezdeset i šest godina. Potpuno sam pokretan i zdrav. Živim sa
+      suprugom u kući. Imam ispravan auto u dvorištu i vozim bez problema. Supruga ide sa mnom u
+      bolnicu kao pratnja. Redovito odlazim na sve kontrole i nemam propuštenih termina.
+    expected:
+      birth_year: 1960
+      settlement: Lički Osik
+      mobility_class: walks
+      lives_alone: false
+      companion: true
+      own_car: true
+      missed_visits_last_year: 0
+
+  - id: e13
+    source: "E13-T5 #13"
+    tags: [trap_lives_alone, wheelchair, no_settlement]
+    text: >-
+      Živimo u jednom selu blizu Plitvica. Suprug i ja imamo po sedamdeset devet godina. On se
+      kreće jedino u kolicima. Živimo sami, nas dvoje. Nemamo auto ni vozačku. Ja sam mu jedina
+      pratnja. Do sada nismo propustili nijedan pregled.
+    expected:
+      birth_year: 1947
+      mobility_class: wheelchair
+      lives_alone: false     # "sami, nas dvoje" = živi sa suprugom
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+    # settlement nije naveden: "selo blizu Plitvica" nije naselje
+
+  - id: e14
+    source: "E13-T5 #14 (dodan ispravak dobi)"
+    tags: [self_correction]
+    text: >-
+      Iz Perušića, Ivka Ivić. Imam šezdeset dvije... ne, šezdeset tri, u rujnu sam navršila.
+      Hodam sama. Živim s obitelji. Auta nemam, sin me inače vozi, al ovaj put radi u pilani pa
+      ću morat sama. Nisam nikad propustila.
+    expected:
+      first_name: Ivka
+      last_name: Ivić
+      birth_year: 1963
+      settlement: Perušić
+      mobility_class: walks
+      lives_alone: false
+      companion: false
+      own_car: false
+      missed_visits_last_year: 0
+
+  - id: e15
+    source: "E13-T5 #15"
+    tags: [ordinal_age, cane]
+    text: >-
+      Zovem iz Gornjeg Kosinja. Meni je sedamdeset i deveta godina. Hodam polako i nesigurno uz
+      pomoć štapa. Živim sam u kućanstvu. Nemam vlastiti automobil. Nemam nikoga svoga u blizini
+      da ide sa mnom. Već sam jednom ove godine fulao kontrolu zbog poplave i lošeg prijevoza.
+    expected:
+      birth_year: 1948
+      settlement: Gornji Kosinj
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 1
+    review: [birth_year]
+
+  - id: e16
+    source: "E13-T5 #17 (zove kći; dodani MBO, ime i djelatnost)"
+    tags: [mbo, caller_not_patient, wheelchair, oncology]
+    text: >-
+      Zovem iz Senja za mamu. Ona je u kolicima. Ima sedamdeset četiri. Živimo same nas dvije.
+      Auta nemamo. Ja idem s njom, obavezno. Prvi put idemo na taj pregled, na onkologiju u
+      Rijeku. Njezin MBO je 000 000 302, a zove se Kata Katić.
+    mbo_in_text: "000000302"
+    expected:
+      first_name: Kata
+      last_name: Katić
+      birth_year: 1952
+      settlement: Senj
+      mobility_class: wheelchair
+      lives_alone: false
+      companion: true
+      own_car: false
+      department: oncology
+      visit_type: first_visit
+
+  - id: e17
+    source: "E13-T5 #18 (Gračac je u Zadarskoj županiji: namjerno izvan područja)"
+    tags: [outside_county, crutches, fixed_date, car_unusable]
+    text: >-
+      Javljam se iz okolice Gračaca. Imam četrdeset pet. Hodam na štakama, slomio sam nogu, u
+      gipsu sam. Živim sam u stanu. Auto imam, ali s gipsom ne smijem vozit. Nemam nikog da ide
+      sa mnom. Idem na kontrolu na ortopediju, skidaju gips, mora bit točno taj dan, osamnaestog.
+    expected:
+      birth_year: 1981
+      settlement: Gračac
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      department: orthopaedics
+      visit_type: follow_up
+      urgency_class: fixed
+      earliest_date: 2026-11-18
+      latest_date: 2026-11-18
+    review: [settlement, mobility_class, own_car]   # izvan županije; štake privremeno; auto postoji
+
+  - id: e18
+    source: "E13-T5 #19 (zove susjeda)"
+    tags: [caller_not_patient, stretcher, phone_type, vague_address]
+    text: >-
+      Ja sam susjeda, zovem za baba Maru, Mara Marić, iz zaseoka kod Udbine. Ona ima osamdeset
+      osam, leži u krevetu, ne može se dić. Sama živi, nema nikog od rodbine. Auta nema. Ja je ne
+      mogu pratit, radim. Dosad nije propustila nijedan pregled jer smo je mi susjedi vozili, al
+      sad više ne može sjedit u autu. Ima onaj mali mobitel na tipke.
+    expected:
+      first_name: Mara
+      last_name: Marić
+      birth_year: 1938
+      settlement: Udbina
+      phone_type: basic_mobile
+      mobility_class: stretcher
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 0
+    review: [settlement]
+
+  - id: e19
+    source: "E13-T5 #20 (dodani raspored dijalize i dio dana)"
+    tags: [dialysis, recurrence, car_unusable, time_of_day]
+    text: >-
+      Zovem iz Korenice, Stipe Stipić. Sedamdeset mi je, točno. Hodam ja normalno. Sam sam u kući.
+      Auto imam u dvorištu, al poslije dijalize sam preslab da vozim. Sin radi na terenu pa idem
+      sam. Na dijalizu idem triput tjedno, ponedjeljak, srijeda, petak, ujutro. Nisam nijednu
+      propustio.
+    expected:
+      first_name: Stipe
+      last_name: Stipić
+      birth_year: 1956
+      settlement: Korenica
+      mobility_class: walks
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 0
+      department: dialysis
+      visit_type: dialysis_session
+      recurrence: 3x_weekly
+      preferred_time_of_day: morning
+    review: [own_car]
+
+  - id: e20
+    source: "E13-T5 #21 i #45 (skraćeno: većina podataka nedostaje)"
+    tags: [missing_fields]
+    text: >-
+      Dobar dan, zovem iz Donjeg Lapca. Trebala bi se naručit kod specijaliste, prvi put. Muž mi
+      je bolestan pa ne može sa mnom. Auta nemamo.
+    expected:
+      settlement: Donji Lapac
+      lives_alone: false
+      companion: false
+      own_car: false
+      visit_type: first_visit
+    # namjerno bez dobi, pokretljivosti, djelatnosti i propuštenih pregleda
+
+  - id: e21
+    source: "E13-T5 #23 (auto u kvaru)"
+    tags: [caller_not_patient, cane, car_broken]
+    text: >-
+      Zovem iz Vrhovina, za mamu. Ima osamdeset jednu, hoda ona, ali samo polako sa štapom.
+      Živimo zajedno. Auto nam je u kvaru već mjesec dana. Ja ću ić s njom u bolnicu. Nije nikad
+      propustila termin.
+    expected:
+      birth_year: 1945
+      settlement: Vrhovine
+      mobility_class: cane
+      lives_alone: false
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+
+  - id: e22
+    source: "E13-T5 #25 i #32 (spojeno)"
+    tags: [ordinal_age, cane]
+    text: >-
+      Zovem iz Smiljana. Meni je sedamdeset i deveta godina. Hodam polako i isključivo uz pomoć
+      štapa. Živim sam nakon smrti supruge. Nemam automobil niti vozačku dozvolu. Obitelj mi živi
+      daleko pa idem bez pratnje. Prošle godine sam propustio jednu kontrolu jer me nije imao tko
+      odvesti.
+    expected:
+      birth_year: 1948
+      settlement: Smiljan
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 1
+    review: [birth_year]
+
+  - id: e23
+    source: "E13-T5 #26 (dodan ispravak pokretljivosti)"
+    tags: [self_correction, missed_no_timeframe, birth_year_spoken]
+    text: >-
+      Iz Perušića sam. Rođena sam četrdeset i devete. Hodam bez pomagala... zapravo, zadnjih
+      mjeseci ipak sa štapom, kad je klizavo. Živim posve sama u kući. Auta nemam. Djeca su mi
+      daleko pa moram ići bez pratnje. Već sam dvaput propustila pregled jer autobus ne vozi u
+      pravo vrijeme.
+    expected:
+      birth_year: 1949
+      settlement: Perušić
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 2
+    review: [missed_visits_last_year]   # "već dvaput" bez vremenskog okvira
+
+  - id: e24
+    source: "E13-T5 #27"
+    tags: [wheelchair, car_broken]
+    text: >-
+      Javljam se iz Otočca. Gospodin Ivan ovdje, imam pedeset osam godina. Krećem se jedino u
+      invalidskim kolicima. Živim sa suprugom u kući. Auto nam je u kvaru. Supruga ide sa mnom kao
+      obavezna pratnja. Redovito obavljam preglede i nemam propuštenih termina.
+    expected:
+      first_name: Ivan
+      birth_year: 1968
+      settlement: Otočac
+      mobility_class: wheelchair
+      lives_alone: false
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+
+  - id: e25
+    source: "E13-T5 #28 (dodani kat i lift)"
+    tags: [stretcher, floor]
+    text: >-
+      Zovem vas iz Senja. Gospođa Ana ovdje, imam osamdeset jednu. Ležim u krevetu, ne mogu se
+      dizat. Živim s kćeri u stanu, treći kat, ima lift, ali mali, nosila ne stanu. Kći ide sa
+      mnom. Nisam propustila nijedan termin u zadnjih godinu dana.
+    expected:
+      first_name: Ana
+      birth_year: 1945
+      settlement: Senj
+      mobility_class: stretcher
+      lives_alone: false
+      companion: true
+      floor: 3
+      elevator: true
+      missed_visits_last_year: 0
+    review: [elevator]   # lift postoji, ali nosila ne stanu
+
+  - id: e26
+    source: "E13-T5 #29 (djelatnost promijenjena u radiologiju)"
+    tags: [radiology, procedure, urgency]
+    text: >-
+      Iz Korenice sam, Josip Josipović. Šezdeset dvije godine. Hodam polako, sa štapom. Žena je
+      bolesna pa ću morat sam. Auto ne radi. Trebam na magnetsku, snimanje kralježnice, piše na
+      uputnici da je hitno, u par dana.
+    expected:
+      first_name: Josip
+      last_name: Josipović
+      birth_year: 1964
+      settlement: Korenica
+      mobility_class: cane
+      lives_alone: false
+      companion: false
+      own_car: false
+      department: radiology
+      visit_type: procedure_test
+      urgency_class: within_few_days
+
+  - id: e27
+    source: "E13-T5 #36 (dodano prizemlje)"
+    tags: [wheelchair, birth_year_spoken, floor]
+    text: >-
+      Javljam se iz Karlobaga. Gospođa Ljubica ovdje, rođena sam trideset i osme. Krećem se samo u
+      kolicima. Živim s kćeri u kući, u prizemlju, nema stepenica. Auta nemamo. Kći ide sa mnom.
+      Redovito idem na preglede, nisam nijedan propustila.
+    expected:
+      first_name: Ljubica
+      birth_year: 1938
+      settlement: Karlobag
+      mobility_class: wheelchair
+      lives_alone: false
+      companion: true
+      floor: 0
+      own_car: false
+      missed_visits_last_year: 0
+
+  - id: e28
+    source: "E13-T5 #38"
+    tags: [cane, cardiology, missed_no_timeframe]
+    text: >-
+      Iz Jablanca sam. Gospođa Milka ovdje, rođena tisuću devetsto četrdeset i šeste. Hodam polako
+      i jedino sa štapom. Živim sama nakon smrti muža. Auta nemam, a u mjestu me nema tko povest.
+      Nema nikoga svoga blizu. Tri puta sam već propustila kardiološku kontrolu jer nemam prijevoz.
+    expected:
+      first_name: Milka
+      birth_year: 1946
+      settlement: Jablanac
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      own_car: false
+      missed_visits_last_year: 3
+      department: cardiology
+      visit_type: follow_up
+    review: [missed_visits_last_year]
+
+  - id: e29
+    source: "E13-T5 #39 (dodana privola za zajedničku vožnju)"
+    tags: [carpool_rider, oncology]
+    text: >-
+      Javljam se iz Kutereva. Petar Petrović, rođen sedamdeset treće. Hodam normalno. Živim sa
+      suprugom, ona ide sa mnom. Auta nemamo. Idem na onkološku kontrolu u Rijeku. Ako netko iz
+      kraja vozi u Rijeku isti dan, mi bismo rado išli s njim, nema problema.
+    expected:
+      first_name: Petar
+      last_name: Petrović
+      birth_year: 1973
+      settlement: Kuterevo
+      mobility_class: walks
+      lives_alone: false
+      companion: true
+      own_car: false
+      carpool_rider_consent: true
+      department: oncology
+      visit_type: follow_up
+
+  - id: e30
+    source: "E13-T5 #42"
+    tags: [cane, floor, cardiology]
+    text: >-
+      Javljam se iz Gospića. Gospođa Marija ovdje, rođena sam četrdeset i prve. Mogu hodati, ali
+      samo sa štapom. Živim sama u stanu na drugom katu bez lifta. Nemam auto. Nema nikoga svoga
+      blizu pa moram sama. Prošle godine sam propustila jednu kontrolu kod kardiologa, sad trebam
+      novu.
+    expected:
+      first_name: Marija
+      birth_year: 1941
+      settlement: Gospić
+      mobility_class: cane
+      lives_alone: true
+      companion: false
+      floor: 2
+      elevator: false
+      own_car: false
+      missed_visits_last_year: 1
+      department: cardiology
+      visit_type: follow_up
+
+  - id: e31
+    source: "E13-T5 #43"
+    tags: [wheelchair, no_settlement, ordinal_age]
+    text: >-
+      Zovem iz sela podno Velebita. Meni je osamdeset druga godina. Krećem se jedino u kolicima.
+      Živim sa ženom, ali ona je prestara da me podiže. Auta nemamo. Žena ide sa mnom, ali nam
+      treba pomoć kod ukrcaja. Do sada nismo propustili nijedan pregled.
+    expected:
+      birth_year: 1945
+      mobility_class: wheelchair
+      lives_alone: false
+      companion: true
+      own_car: false
+      missed_visits_last_year: 0
+    review: [birth_year]
+
+  - id: e32
+    source: "E13-T5 #49 (kemoterapija)"
+    tags: [oncology, chemotherapy, procedure]
+    text: >-
+      Zovem iz Senja. Imam pedeset dvije, hodam normalno. Živim s obitelji, ali muž radi na terenu
+      u Rijeci pa moram ići sama. Nemam auto ni vozačku. Prvi put idem na kemoterapiju u Rijeku,
+      dvadeset četvrtog, taj datum je fiksan.
+    expected:
+      birth_year: 1974
+      settlement: Senj
+      mobility_class: walks
+      lives_alone: false
+      companion: false
+      own_car: false
+      department: oncology
+      visit_type: chemotherapy
+      urgency_class: fixed
+      earliest_date: 2026-11-24
+      latest_date: 2026-11-24
+    # kemoterapija je vrsta pregleda; iz nje E3-T2 zna da vrijedi iznimka za putni nalog
+
+  - id: e33
+    source: "E13-T5 #30 (dodan pacijent-vozač s privolom)"
+    tags: [patient_driver, carpool_rider, birth_year_spoken]
+    text: >-
+      Javljam se iz Perušića. Stjepan Stjepanović, rođen pedeset i pete. Hodam normalno, imam auto
+      i vozim. Supruga ide sa mnom. Ako vam treba, mogu povesti još nekoga do Gospića, imamo mjesta
+      za jednog. Nisam propustio nijedan pregled.
+    expected:
+      first_name: Stjepan
+      last_name: Stjepanović
+      birth_year: 1955
+      settlement: Perušić
+      mobility_class: walks
+      lives_alone: false
+      companion: true
+      own_car: true
+      carpool_driver_seats: 1
+      missed_visits_last_year: 0
+
+  - id: e34
+    source: "E13-T5 #41 (dodani MBO i telefon)"
+    tags: [mbo, phone]
+    text: >-
+      Iz Metajne sam, Ivo Ivanović. MBO mi je nula nula nula nula nula nula tri nula tri. Telefon
+      000 0303, to je mobitel na tipke. Rođen šezdeset treće, hodam normalno. Živim sa ženom, ona
+      ide sa mnom. Auta nemamo.
+    mbo_in_text: "000000303"   # izgovoren riječima; uklanjanje mora prepoznati i taj oblik
+    expected:
+      first_name: Ivo
+      last_name: Ivanović
+      birth_year: 1963
+      settlement: Metajna
+      phone: "000 0303"
+      phone_type: basic_mobile
+      mobility_class: walks
+      lives_alone: false
+      companion: true
+      own_car: false

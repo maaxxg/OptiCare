@@ -51,17 +51,29 @@ travel_order:
     # HAK karta nema API: sustav računa cestovnu udaljenost preko adaptera za rute (ORS),
     # što je približno. Rubne slučajeve označava sestri umjesto da odluči sam.
     system_source: route_adapter
-    borderline_band_km: [45, 55]  # REVIEW: širina pojasa je procjena
+    # Pojas od ±5 km (oko 10 %) pokriva poznata odstupanja: u slučaju iz Novog lista HAK je dao
+    # 49,83 km, a Google 53,1 km (razlika 3,3 km). HAK mjeri NAJKRAĆU relaciju, a ruteri po
+    # zadanom vraćaju NAJBRŽU, koja je često dulja (OSRM, Otočac -> OB Gospić: 57 km autocestom).
+    # Zato adapter treba tražiti najkraću rutu (ORS: preference=shortest).
+    borderline_band_km: [45, 55]
     on_borderline: flag           # "provjeriti udaljenost na HAK karti"
     on_unknown: flag              # bez udaljenosti nema prijedloga; nikad se ne nagađa (pravilo 5)
+  place:
+    # ZOZO čl. 65. st. 4. i 5. (NN 105/2025): "mjesto" je grad ili naselje izvan grada. Naselje u
+    # sastavu grada računa se kao zasebno mjesto ako je od grada udaljeno 20 i više km.
+    separate_if_km_from_town: 20
   nearest_provider:
     # Pravo vrijedi prema najbližem ugovornom subjektu s tom djelatnošću (ZOZO čl. 62. st. 2.).
     # U sustavu: najbliža ustanova (Facility) koja ima traženi odjel (department).
     rule: nearest_facility_with_department
     # Iznimke koje sustav ne može sam utvrditi, pa ih sestra označava ručno:
     manual_overrides:
-      - Pacijent je prihvatio udaljeniju ustanovu radi kraće liste čekanja (čl. 62. st. 5.): pravo ostaje.
+      - "Pacijent je prihvatio udaljeniju ustanovu radi kraće liste čekanja (čl. 62. st. 5.): pravo ostaje."
       - Bliža ustanova ne može pružiti skrb u primjerenom roku s obzirom na zdravstveno stanje.
+        (Pravilnik NN 37/2026, čl. 75. st. 1. t. 3. i st. 2.-3.; za malignu i hematološku bolest
+        najdulje prihvatljivo čekanje je četiri tjedna.)
+      - U najbližem mjestu nema ugovorene djelatnosti za odgovarajuću zaštitu, npr. subspecijalistički
+        pregled (Pravilnik NN 37/2026, čl. 75. st. 1. t. 2.).
     # Pacijent koji SAM bira udaljeniju ustanovu nema pravo na naknadu ni na sanitet (čl. 62. st. 6.).
   distance_exceptions:
     # ZOZO čl. 62. st. 4.: pravo na naknadu neovisno o udaljenosti.
@@ -71,8 +83,8 @@ travel_order:
     - key: radiotherapy_chemotherapy
       label: radioterapija i kemoterapija
       # Ne vrijedi za onkologiju općenito: onkološka kontrola nije kemoterapija ni radioterapija.
-      # Odjel (department: oncology) nije dovoljan; treba vrsta pregleda ili ručna oznaka sestre.
-      system_check: manual_flag   # REVIEW: E3-T2 odlučuje: nova visit_type ili polje na zahtjevu
+      # Odjel (department: oncology) nije dovoljan; odlučuje vrsta pregleda (odluka tima 14. 11. 2026.).
+      system_check: visit_type in [chemotherapy, radiotherapy]
     - key: hemodialysis
       label: hemodijaliza kao kronični bubrežni bolesnik
       system_check: visit_type == dialysis_session
@@ -90,21 +102,35 @@ travel_order:
       system_check: out_of_scope
   compensation:
     # ZOZO čl. 65. st. 1.: 0,025 % proračunske osnovice po km najkraće cestovne relacije,
-    # neovisno o prijevoznom sredstvu (autobus, vlak, vlastiti automobil). Mediji 2025. navode ~0,11 €/km.
+    # neovisno o prijevoznom sredstvu (autobus, vlak, vlastiti automobil).
     rate: "0,025 % proračunske osnovice po km"
-    approx_eur_per_km: 0.11       # REVIEW: ovisi o proračunskoj osnovici za tekuću godinu
-    round_trip: true              # REVIEW: primjeri u medijima računaju oba smjera; zakon to izričito ne kaže
+    # Proračunska osnovica je 441,44 € i 2025. i 2026.: 0,025 % = 0,1104 €/km. Provjeriti svake
+    # godine u zakonu o izvršavanju državnog proračuna.
+    approx_eur_per_km: 0.11
+    # Pravilnik NN 37/2026, čl. 75. st. 5.: naknada se isplaćuje "u dvostrukom iznosu" za najkraću
+    # udaljenost od adrese do ustanove, dakle za oba smjera. Udaljenost se utvrđuje na dan obrade
+    # zahtjeva prema HAK karti (st. 6.). Isti iznos dobiva i pratnja koju je odredio liječnik (čl. 79.).
+    round_trip: true
   issued_by:
     # ZOZO čl. 65.: tiskanicu putnog naloga izdaje izabrani doktor medicine primarne zdravstvene
     # zaštite (ili izabrani doktor dentalne medicine), a ovlašteni radnik HZZO-a kad poziva HZZO.
     - izabrani doktor primarne zdravstvene zaštite
-  # Do 31. 7. 2025. naknada za hemodijalizu išla je na temelju potvrde ustanove o provedenim
-  # hemodijalizama, bez putnog naloga. REVIEW: novi tekst čl. 65. to više ne spominje.
+  # Hemodijaliza (Pravilnik NN 37/2026, čl. 83.-84.): bolesnik bez prava na sanitet dobiva mjesečnu
+  # paušalnu naknadu (dvostruka najniža cijena mjesečne pokazne karte) ako je ustanova udaljena
+  # 500 m ili više. Isplaćuje se na temelju potvrde ustanove o broju dijaliza u prethodnom mjesecu,
+  # bez putnog naloga. Ako je dijaliza izvan mjesta prebivališta, uz paušal ide i naknada po km
+  # iz ZOZO čl. 65. st. 1. Za sanitet na dijalizu postoji posebna tiskanica (čl. 14. st. 7.).
 
 # Što sustav priprema (E3-T2): prijedlog prava, razlog u jednoj rečenici, udaljenost i njen izvor,
 # primijenjenu iznimku i popis oznaka za sestru. Ne ispisuje stvarnu tiskanicu.
 
 sources:
+  - title: Zakon o izmjenama i dopuni ZOZO-a (NN 105/2025), na snazi od 1. 8. 2025.
+    url: https://narodne-novine.nn.hr/clanci/sluzbeni/2025_07_105_1474.html
+    note: Konačni tekst; čl. 62. st. 1-2 i čl. 65. odgovaraju prijedlogu PZ 148, uz nove st. 4-5 (pojam mjesta).
+  - title: Pravilnik o kriterijima i načinu ostvarivanja prava iz obveznoga zdravstvenog osiguranja (NN 37/2026)
+    url: https://narodne-novine.nn.hr/clanci/sluzbeni/full/2026_04_37_449.html
+    note: Sanitetski prijevoz čl. 14.-18.; naknada za prijevoz čl. 75.-82. (oba smjera, HAK); hemodijaliza čl. 83.-84.
   - title: Prijedlog Zakona o izmjenama i dopuni ZOZO-a (PZ 148), na snazi od 1. 8. 2025.
     url: https://sabor.hr/sites/default/files/uploads/sabor/2025-06-27/154502/PZ_148.pdf
     note: Sadrži novi tekst čl. 62. st. 1-2 i čl. 65. te dotadašnji tekst čl. 62. st. 4 (iznimke ostaju).
@@ -122,6 +148,5 @@ sources:
   - title: Novi list, slučaj 49,83 km prema HAK karti (9. 2. 2026.)
     url: https://www.novilist.hr/?p=1624652
 
-# Otvoreno (REVIEW):
-# - Pročitan je prijedlog zakona; konačni tekst u Narodnim novinama nije provjeren, kao ni izmjene nakon veljače 2026.
-# - ZOZO sada upućuje na pravilnik iz čl. 19. st. 9.; noviji pravilnik o sanitetskom prijevozu od NN 123/09 nije pronađen.
+# Nije pronađen dobar izvor:
+# - ZOZO sada upućuje na pravilnik iz čl. 19. st. 9.; noviji pravilnik o sanitetskom prijevozu od NN 123/09 nije pronađen, pa NN 123/09 ostaje radna osnova.
