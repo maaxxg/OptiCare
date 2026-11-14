@@ -17,7 +17,9 @@
 #
 # ZNAČENJE POLJA (kako ih procjenjuje skripta iz E2-T4)
 # - birth_year: reference_date.year minus navršene godine; skripta prihvaća odstupanje ±1.
-#   "Meni je sedamdeset četvrta godina" znači 73 navršene godine.
+#   "Meni je sedamdeset četvrta godina" znači 73 navršene godine (74. godina života počinje
+#   73. rođendanom). U razgovoru se redni broj ponekad koristi i za navršene godine; razlika je
+#   točno 1, pa je pokriva tolerancija ±1, a review ostaje da sestra provjeri.
 # - settlement: mjesto kako je rečeno (normalizirano ime naselja). Općinu i županiju daje
 #   geokodiranje (E2-T3), ne LLM, pa nisu ovdje. "Selo kod X" -> settlement X + review.
 # - lives_alone: živi sam u kućanstvu. "Živimo sami, nas dvoje" -> false.
@@ -25,6 +27,8 @@
 # - own_car: pacijent ima auto kojim SAM može doći na ovaj pregled. Auto u kvaru ili zabrana
 #   vožnje -> false (uz review kad auto postoji, ali se ne smije voziti).
 # - mobility_class: walks, cane (štap, štake, hodalica), wheelchair, stretcher (leži, nosila).
+#   Štake idu u cane kao i štap: ISO 9999 ih svrstava u istu skupinu (12 03, pomagala za hodanje
+#   kojima se rukuje jednom rukom). Privremene štake (gips) dobivaju review.
 # - carpool_driver_seats: koliko drugih pacijenata vozač nudi povesti; carpool_rider_consent:
 #   pacijent pristaje ići s drugim pacijentom-vozačem.
 # - missed_visits_last_year: propušteni pregledi u zadnjih 12 mjeseci ("lani", "ove godine",
@@ -32,7 +36,8 @@
 # - phone_type: landline (kućni/fiksni), basic_mobile (mobitel na tipke), smartphone.
 # - department, visit_type, urgency_class: ključevi iz urgency_and_durations.yaml.
 #   "Specijalist" bez djelatnosti -> department null.
-# - preferred_time_of_day: morning ili afternoon.   # REVIEW: vrijednosti još nisu u šifrarniku
+# - preferred_time_of_day: morning ili afternoon (šifrarnik `times_of_day` u urgency_and_durations.yaml;
+#   granica je 12:00). "Ujutro", "prijepodne" -> morning; "poslije podne", "popodne" -> afternoon.
 # - recurrence: npr. 3x_weekly (kao u patient_profiles.yaml).
 # - earliest_date / latest_date: samo kad je datum ili rok izričito rečen.
 
@@ -642,11 +647,11 @@ examples:
       companion: false
       own_car: false
       department: oncology
-      visit_type: procedure_test
+      visit_type: chemotherapy
       urgency_class: fixed
       earliest_date: 2026-11-24
       latest_date: 2026-11-24
-    # kemoterapija: iznimka za putni nalog traži oznaku na zahtjevu (E3-T2), nije polje izdvajanja
+    # kemoterapija je vrsta pregleda; iz nje E3-T2 zna da vrijedi iznimka za putni nalog
 
   - id: e33
     source: "E13-T5 #30 (dodan pacijent-vozač s privolom)"

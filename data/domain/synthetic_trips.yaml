@@ -11,7 +11,7 @@ history_days: 180            # raspon u prošlost (dani)
 random_seed: 42
 
 # Udjeli vrsta pregleda u povijesnim vožnjama (zbroj ne mora biti 1; normalizira se u kodu).
-# REVIEW: odražava li omjer tipičnu potražnju (dijaliza 3x tjedno + kontrole čine glavninu vožnji)?
+# PROCJENA (nije pronađen dobar izvor): dijaliza ~19 % vožnji (svaki pacijent 3x tjedno), kontrole su glavnina ostalih.
 visit_mix:
   - {department: dialysis,          visit_type: dialysis_session, weight: 22}
   - {department: internal_medicine, visit_type: follow_up,        weight: 10}
@@ -32,10 +32,12 @@ visit_mix:
   - {department: radiology,         visit_type: procedure_test,   weight: 8}
   - {department: oncology,          visit_type: follow_up,        weight: 5}
   - {department: oncology,          visit_type: first_visit,      weight: 2}
-  - {department: oncology,          visit_type: procedure_test,   weight: 4}
+  - {department: oncology,          visit_type: procedure_test,   weight: 2}
+  - {department: oncology,          visit_type: chemotherapy,     weight: 3}
+  - {department: oncology,          visit_type: radiotherapy,     weight: 2}
 
 # Udjeli klasa pokretljivosti u povijesnim vožnjama.
-# REVIEW: udjeli po pokretljivosti u Ličko-senjskoj županiji.
+# PROCJENA (nije pronađen dobar izvor): populacija kojoj treba prijevoz, ne cijela županija; nepokretni su manjina.
 mobility_weights:
   walks: 0.40
   cane: 0.30
@@ -44,7 +46,7 @@ mobility_weights:
 
 # Raspodjela vremena ukrcaja (od dolaska pred vrata do polaska vozila, u minutama).
 # Medijan dolazi iz `urgency_and_durations.yaml -> boarding_time_min` (3, 5, 10, 15 min).
-# REVIEW: 90. percentil i dodatak po katu bez lifta.
+# PROCJENA (nije pronađen dobar izvor): 90. percentil i dodatak po katu bez lifta (nosila niz stepenice nose dvojica).
 boarding:
   p90_min:
     walks: 5
@@ -56,18 +58,18 @@ boarding:
     cane: 1.5
     wheelchair: 3.5
     stretcher: 5.0
-  # REVIEW: pratnja malo skraćuje ukrcaj (0.90 = 10% brže).
+  # PROCJENA (nije pronađen dobar izvor): pratnja malo skraćuje ukrcaj (0.90 = 10% brže).
   companion_factor: 0.90
   min_minutes: 1.0
 
 # Trajanje pregleda u ustanovi: dodatni utjecaj dobi i najmanje dopušteno trajanje (u minutama).
 visit_duration:
-  # REVIEW: pacijenti od 75 i više godina u prosjeku trebaju malo više vremena (1.08 = 8% duže).
+  # PROCJENA (nije pronađen dobar izvor): pacijenti od 75 i više godina u prosjeku trebaju malo više vremena (1.08 = 8% duže).
   age_over_75_factor: 1.08
   min_minutes: 10.0
 
 # Kontekst pacijenta u povijesnim vožnjama (dob, kat, lift, pratnja).
-# U Ličko-senjskoj županiji 26-28% stanovništva ima 65+ godina (DZS Popis 2021).
+# U Ličko-senjskoj županiji 26,3 % stanovništva ima 65+ godina (DZS Popis 2021., 11 224 od 42 748).
 patient_context:
   age_min: 45
   age_max: 92
@@ -87,7 +89,7 @@ patient_context:
 
 # Početak vožnje (dolazak pred vrata) unutar dana, po zagrebačkom lokalnom vremenu.
 # Sati od earliest_hour do latest_hour (uključivo), minute u koracima minute_step: 06:00 do 11:50.
-# REVIEW: stvarni raspored jutarnjih polazaka (dijaliza obično rano ujutro).
+# PROCJENA (nije pronađen dobar izvor): centar za dijalizu u Gospiću radi u dvije smjene (hrčak, ~2014.), pa polasci od 6 do 12 h pokrivaju obje.
 start_window:
   earliest_hour: 6
   latest_hour: 11
@@ -100,11 +102,11 @@ start_window:
 drive:
   mean_speed_kmh: 55.0
   # Faktor kojim se množi vrijeme vožnje (promet, cesta, godišnje doba).
-  # REVIEW: raspon varijacije brzine.
+  # PROCJENA (nije pronađen dobar izvor): raspon varijacije brzine; OSRM za rute po Lici daje 42-75 km/h, što je u skladu s 55 km/h ± raspon.
   speed_jitter: {min: 0.9, max: 1.2}
   min_drive_min: 5.0           # najkraće vrijeme vožnje u jednom smjeru (minute)
   # Čekanje vozila nakon pregleda prije povratka kući (minute).
-  # REVIEW: tipično čekanje na povratak.
+  # PROCJENA (nije pronađen dobar izvor): tipično čekanje na povratak.
   return_wait_min: {min: 5.0, max: 20.0}
   # Odjeli koji uvijek idu u vanjsku ustanovu (KBC) i koriste samo vanjski pojas.
   external_departments: [oncology]

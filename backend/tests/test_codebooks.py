@@ -124,4 +124,4 @@ def test_enums_match_yaml_keys() -> None:
 
 def test_codebooks_endpoint_from_yaml() -> None:
     res = read_codebooks()
-    assert len(res.visit_durations) == 20
+    assert len(res.visit_durations) == 22

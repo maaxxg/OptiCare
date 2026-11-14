@@ -79,20 +79,21 @@ SETTLEMENT_COORDINATES: dict[str, tuple[float, float]] = {
     "Vrhovine": (44.85176, 15.42057),
 }
 
-# REVIEW: estimates, not census figures; replace with DZS 2021 data before use in forecasting.
+# Share of residents aged 65+ per town/municipality, DZS Census 2021 (popis_2021-stanovnistvo_po_
+# gradovima_opcinama.xlsx, table 20, total population, all settlement types). County: 0.263.
 MUNICIPALITY_65_PLUS_SHARE: dict[str, float] = {
-    "Brinje": 0.301,
-    "Donji Lapac": 0.348,
-    "Gospić": 0.238,
-    "Karlobag": 0.318,
-    "Lovinac": 0.329,
-    "Novalja": 0.221,
-    "Otočac": 0.254,
-    "Perušić": 0.292,
-    "Plitvička Jezera": 0.265,
-    "Senj": 0.279,
-    "Udbina": 0.334,
-    "Vrhovine": 0.362,
+    "Brinje": 0.300,
+    "Donji Lapac": 0.378,
+    "Gospić": 0.214,
+    "Karlobag": 0.419,
+    "Lovinac": 0.306,
+    "Novalja": 0.263,
+    "Otočac": 0.236,
+    "Perušić": 0.313,
+    "Plitvička Jezera": 0.223,
+    "Senj": 0.296,
+    "Udbina": 0.362,
+    "Vrhovine": 0.387,
 }
 
 # Hospital coordinates from OpenStreetMap.
@@ -147,8 +148,6 @@ SLOT_TIMES: dict[str, dict[Department, list[time]]] = {
     "kbc_rijeka": {
         Department.CARDIOLOGY: [time(9, 30), time(11, 0)],
         Department.ONCOLOGY: [time(9, 30), time(11, 30)],
-    },
-    "kbc_zagreb": {
         Department.NEUROLOGY: [time(10, 0), time(12, 0)],
     },
 }

@@ -63,6 +63,10 @@ class VisitType(StrEnum):
     FOLLOW_UP = "follow_up"
     PROCEDURE_TEST = "procedure_test"
     DIALYSIS_SESSION = "dialysis_session"
+    # Separate types because the HZZO distance exception covers chemo- and radiotherapy only,
+    # not oncology in general (hzzo_rules.yaml), and their durations differ widely.
+    CHEMOTHERAPY = "chemotherapy"
+    RADIOTHERAPY = "radiotherapy"
 
 
 class UrgencyClass(StrEnum):
