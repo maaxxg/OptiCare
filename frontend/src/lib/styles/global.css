@@ -1,9 +1,9 @@
 :root {
 	--bg: #ffffff;
-	--green: #92C18B;
-	--green-dark: #92C18B;
+	--green: #92c18b;
+	--green-dark: #92c18b;
 	--green-light: #e8eed9;
-	--green-label: #92C18B;
+	--green-label: #92c18b;
 	--border: #8aaa6a;
 	--text: #1a1a1a;
 	--text-muted: #666;
@@ -13,7 +13,7 @@
 	--radius-sm: 12px;
 	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
 	--shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 *,
@@ -121,7 +121,9 @@ body {
 	font-family: var(--font-sans);
 	color: var(--text);
 	outline: none;
-	transition: border-color 0.2s, box-shadow 0.2s;
+	transition:
+		border-color 0.2s,
+		box-shadow 0.2s;
 }
 
 .form-input:focus,
@@ -161,7 +163,9 @@ body {
 	font-weight: 600;
 	font-family: var(--font-sans);
 	cursor: pointer;
-	transition: background 0.2s, transform 0.1s;
+	transition:
+		background 0.2s,
+		transform 0.1s;
 	text-align: center;
 	text-decoration: none;
 }
@@ -188,7 +192,9 @@ body {
 	font-weight: 600;
 	font-family: var(--font-sans);
 	cursor: pointer;
-	transition: background 0.2s, transform 0.1s;
+	transition:
+		background 0.2s,
+		transform 0.1s;
 	text-align: center;
 	text-decoration: none;
 	margin-bottom: 16px;
@@ -283,7 +289,9 @@ input[type='radio'] {
 	border-radius: 50%;
 	background: var(--white);
 	cursor: pointer;
-	transition: border-color 0.2s, background-color 0.2s;
+	transition:
+		border-color 0.2s,
+		background-color 0.2s;
 	margin: 0;
 }
 
@@ -578,7 +586,7 @@ input[type='radio']:checked {
 }
 
 .group-container.green {
-	background: #F1F5EF;
+	background: #f1f5ef;
 	padding: 4px 28px;
 }
 
@@ -659,4 +667,12 @@ input[type='radio']:checked {
 		opacity: 1;
 		transform: translateX(-50%) translateY(0);
 	}
+}
+/* ─── Form error ────────────────────── */
+
+.error-text {
+	color: #c0392b;
+	font-size: 0.88rem;
+	margin-bottom: 16px;
+	text-align: center;
 }

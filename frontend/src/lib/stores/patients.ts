@@ -1,4 +1,7 @@
-// Patient store using simple module-level state
+// Patient requests entered on this device.
+// Temporary: there is no backend intake endpoint yet. Requests are kept in
+// sessionStorage so a page reload does not lose them; replace with POST /api/...
+// once the intake API exists.
 
 export interface Patient {
 	id: string;
@@ -7,10 +10,29 @@ export interface Patient {
 	needsTransport: boolean;
 	willingToDrive: boolean;
 	description: string;
-	createdAt: Date;
+	createdAt: string;
 }
 
-let patients: Patient[] = [];
+const STORAGE_KEY = 'opticare.patients';
+
+function load(): Patient[] {
+	try {
+		const raw = sessionStorage.getItem(STORAGE_KEY);
+		return raw ? (JSON.parse(raw) as Patient[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+function save(patients: Patient[]): void {
+	try {
+		sessionStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
+	} catch {
+		// Storage unavailable (private mode, blocked): keep working in memory.
+	}
+}
+
+let patients: Patient[] = load();
 
 export function getPatients(): Patient[] {
 	return patients;
@@ -20,12 +42,14 @@ export function addPatient(patient: Omit<Patient, 'id' | 'createdAt'>): Patient 
 	const newPatient: Patient = {
 		...patient,
 		id: crypto.randomUUID(),
-		createdAt: new Date()
+		createdAt: new Date().toISOString()
 	};
 	patients = [...patients, newPatient];
+	save(patients);
 	return newPatient;
 }
 
-export function removePatient(id: string) {
+export function removePatient(id: string): void {
 	patients = patients.filter((p) => p.id !== id);
+	save(patients);
 }
