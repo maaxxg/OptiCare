@@ -21,7 +21,7 @@
 		<img src={logo} alt="OptiCare" class="logo-full" />
 		<div class="page-header-right">
 			{#if doctorName}
-				<span class="doctor-name">👤 {doctorName}</span>
+				<span class="doctor-name">{doctorName}</span>
 			{/if}
 			<button class="logout-btn" onclick={handleLogout}>Odjava</button>
 		</div>

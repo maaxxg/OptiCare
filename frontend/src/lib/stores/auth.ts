@@ -1,5 +1,6 @@
-// Simple client-side auth state.
-// No real authentication — just tracks if the doctor has "logged in" on this device.
+// Cosmetic demo login only: it accepts any input and is NOT access control.
+// It just remembers a display name for this browser session. Real access
+// control (if ever needed) belongs to the reverse proxy / a future auth task.
 
 const STORAGE_KEY = 'opticare.auth';
 
