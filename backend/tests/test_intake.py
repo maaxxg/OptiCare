@@ -28,6 +28,7 @@ from app.models import (
     UrgencyClass,
     VisitType,
 )
+from app.schemas import ExtractedPatientDraft, ExtractedVisitRequestDraft
 
 
 class SpyLLMClient:
@@ -253,12 +254,21 @@ def test_llm_hallucinated_mbo_is_discarded() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_croatian_prompt_contains_instructions_and_examples() -> None:
+def test_croatian_prompt_examples_do_not_guess() -> None:
     assert "Ličko-senjskoj županiji" in SYSTEM_PROMPT_HR
-    assert "PRIMJER 1" in SYSTEM_PROMPT_HR
-    assert "PRIMJER 2" in SYSTEM_PROMPT_HR
-    assert '"patient"' in SYSTEM_PROMPT_HR
-    assert '"visit_request"' in SYSTEM_PROMPT_HR
+    outputs = [
+        part.split("Izlaz:\n", 1)[1].split("\n\n", 1)[0]
+        for part in SYSTEM_PROMPT_HR.split("PRIMJER ")[1:]
+    ]
+    assert len(outputs) == 2
+    for raw in outputs:
+        data = json.loads(raw)
+        patient = ExtractedPatientDraft.model_validate(data["patient"])
+        ExtractedVisitRequestDraft.model_validate(data["visit_request"])
+        assert patient.own_car is None
+        assert patient.carpool_driver_seats is None
+        assert patient.carpool_rider_consent is None
+        assert patient.missed_visits_last_year is None
 
 
 def test_all_34_extraction_examples_from_domain_yaml() -> None:

@@ -88,6 +88,8 @@ SYSTEM_PROMPT_HR = (
     'i `"review"` (lista naziva polja čija je vrijednost nesigurna).\n'
     "2. Nikada ne nagađaj podatke koji nisu navedeni u tekstu — za svako nepoznato polje vrati "
     "`null`.\n"
+    "   Broj propuštenih posjeta u zadnjih 12 mjeseci (`missed_visits_last_year`) navedi samo "
+    "ako je izričito rečen.\n"
     "3. Uvijek izdvajaj podatke PACIJENTA, čak i kad zove član obitelji ili susjed.\n"
     "4. Dozvoljene vrijednosti šifrarnika:\n"
     '   - `mobility_class`: "walks" | "cane" | "wheelchair" | "stretcher"\n'
@@ -98,7 +100,7 @@ SYSTEM_PROMPT_HR = (
     '   - `urgency_class`: "fixed" | "within_few_days" | "within_week" | "within_month"\n'
     '   - `preferred_time_of_day`: "morning" | "afternoon"\n\n'
     "PRIMJER 1:\n"
-    'Ulaz: "Pacijent Ivan Kovačević (1958.), Otočac, tel +385 00 000 0002, mobitel. '
+    'Ulaz: "Pacijent Ivan Kovačević (1958.), Otočac, tel +385 00 000 0002, mobitel na tipke. '
     "U invalidskim je kolicima nakon operacije kuka, treba kontrolu kod ortopeda u Gospiću "
     'ovaj tjedan. Supruga ide u pratnju, prizemlje."\n'
     "Izlaz:\n"
@@ -114,10 +116,11 @@ SYSTEM_PROMPT_HR = (
     '    "lives_alone": false,\n'
     '    "companion": true,\n'
     '    "floor": 0,\n'
-    '    "elevator": false,\n'
-    '    "own_car": false,\n'
-    '    "carpool_driver_seats": 0,\n'
-    '    "carpool_rider_consent": false\n'
+    '    "elevator": null,\n'
+    '    "own_car": null,\n'
+    '    "carpool_driver_seats": null,\n'
+    '    "carpool_rider_consent": null,\n'
+    '    "missed_visits_last_year": null\n'
     "  },\n"
     '  "visit_request": {\n'
     '    "department": "orthopaedics",\n'
@@ -143,13 +146,14 @@ SYSTEM_PROMPT_HR = (
     '    "phone_type": null,\n'
     '    "settlement": "Senj",\n'
     '    "mobility_class": "stretcher",\n'
-    '    "lives_alone": false,\n'
+    '    "lives_alone": null,\n'
     '    "companion": null,\n'
     '    "floor": 1,\n'
     '    "elevator": false,\n'
-    '    "own_car": false,\n'
-    '    "carpool_driver_seats": 0,\n'
-    '    "carpool_rider_consent": false\n'
+    '    "own_car": null,\n'
+    '    "carpool_driver_seats": null,\n'
+    '    "carpool_rider_consent": null,\n'
+    '    "missed_visits_last_year": null\n'
     "  },\n"
     '  "visit_request": {\n'
     '    "department": "radiology",\n'
