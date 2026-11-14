@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import statistics
 from datetime import date
 from pathlib import Path
@@ -136,3 +137,35 @@ def test_invalid_params_yaml_raises_domain_error(tmp_path: Path) -> None:
     )
     with pytest.raises(SyntheticTripParamsError):
         generate_synthetic_trip_logs(count=1, data_dir=tmp_path)
+
+
+def test_age_and_companion_factors_scale_durations(tmp_path: Path) -> None:
+    # Same seed, factors set to 1.0: the factors consume no randomness, so rows pair up
+    # one to one and differ only by the multipliers.
+    source_dir = get_settings().data_dir / "domain"
+    shutil.copytree(source_dir, tmp_path / "domain")
+    neutral_path = tmp_path / SYNTHETIC_TRIPS_PATH
+    text = neutral_path.read_text(encoding="utf-8")
+    text = text.replace("companion_factor: 0.90", "companion_factor: 1.0")
+    text = text.replace("age_over_75_factor: 1.08", "age_over_75_factor: 1.0")
+    neutral_path.write_text(text, encoding="utf-8")
+
+    default_rows = generate_synthetic_trip_logs(count=500, seed=7, end_date=date(2026, 11, 14))
+    neutral_rows = generate_synthetic_trip_logs(
+        count=500, seed=7, end_date=date(2026, 11, 14), data_dir=tmp_path
+    )
+
+    saw_old = saw_companion = False
+    for d, n in zip(default_rows, neutral_rows, strict=True):
+        assert (d.patient_age, d.companion) == (n.patient_age, n.companion)
+        if d.patient_age is not None and d.patient_age >= 75 and _visit_minutes(n) > 20:
+            saw_old = True
+            assert _visit_minutes(d) == pytest.approx(_visit_minutes(n) * 1.08, abs=0.15)
+        elif d.patient_age is not None and d.patient_age < 75:
+            assert _visit_minutes(d) == pytest.approx(_visit_minutes(n), abs=0.01)
+        if d.companion and _boarding_minutes(n) > 3:
+            saw_companion = True
+            assert _boarding_minutes(d) == pytest.approx(_boarding_minutes(n) * 0.90, abs=0.15)
+        elif not d.companion:
+            assert _boarding_minutes(d) == pytest.approx(_boarding_minutes(n), abs=0.01)
+    assert saw_old and saw_companion

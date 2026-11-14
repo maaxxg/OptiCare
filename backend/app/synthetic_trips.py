@@ -50,6 +50,7 @@ class VisitMixItem(BaseModel):
 class BoardingParams(BaseModel):
     p90_min: dict[MobilityClass, float]
     extra_min_per_floor_no_elevator: dict[MobilityClass, float]
+    companion_factor: float = Field(..., gt=0)
     min_minutes: float = Field(..., gt=0)
 
     @model_validator(mode="after")
@@ -62,6 +63,7 @@ class BoardingParams(BaseModel):
 
 
 class VisitDurationParams(BaseModel):
+    age_over_75_factor: float = Field(..., gt=0)
     min_minutes: float = Field(..., gt=0)
 
 
@@ -254,6 +256,8 @@ def generate_synthetic_trip_logs(
         )
         if floor > 0 and not elevator:
             boarding_min += floor * boarding_cfg.extra_min_per_floor_no_elevator[mobility]
+        if companion:
+            boarding_min *= boarding_cfg.companion_factor
         boarding_min = max(boarding_cfg.min_minutes, round(boarding_min, 1))
 
         # 2. Visit duration at facility (check-in -> check-out)
@@ -264,6 +268,8 @@ def generate_synthetic_trip_logs(
             p90=float(dur_entry.p90_min),
             minimum=params.visit_duration.min_minutes,
         )
+        if patient_age >= 75:
+            visit_min *= params.visit_duration.age_over_75_factor
         visit_min = max(params.visit_duration.min_minutes, round(visit_min, 1))
 
         # 3. Drive distance and travel times

@@ -56,10 +56,14 @@ boarding:
     cane: 1.5
     wheelchair: 3.5
     stretcher: 5.0
+  # REVIEW: pratnja malo skraćuje ukrcaj (0.90 = 10% brže).
+  companion_factor: 0.90
   min_minutes: 1.0
 
-# Najmanje dopušteno trajanje pregleda pri uzorkovanju (u minutama).
+# Trajanje pregleda u ustanovi: dodatni utjecaj dobi i najmanje dopušteno trajanje (u minutama).
 visit_duration:
+  # REVIEW: pacijenti od 75 i više godina u prosjeku trebaju malo više vremena (1.08 = 8% duže).
+  age_over_75_factor: 1.08
   min_minutes: 10.0
 
 # Kontekst pacijenta u povijesnim vožnjama (dob, kat, lift, pratnja).
