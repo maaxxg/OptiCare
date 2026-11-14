@@ -1,10 +1,19 @@
 <script lang="ts">
 	import logo from '#lib/assets/opticare-logo.svg';
-	import { getDoctorName, logout } from '#lib/stores/auth.js';
+	import { getDoctorName, isLoggedIn, logout } from '#lib/stores/auth.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 
-	const doctorName = getDoctorName();
+	let doctorName = $state(getDoctorName());
+
+	onMount(() => {
+		if (!isLoggedIn()) {
+			goto(resolve('/login'));
+		} else {
+			doctorName = getDoctorName();
+		}
+	});
 
 	function handleLogout() {
 		logout();

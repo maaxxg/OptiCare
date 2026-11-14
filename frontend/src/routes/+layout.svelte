@@ -12,7 +12,8 @@
 
 	onMount(() => {
 		const loginPath = resolve('/login');
-		if (!isLoggedIn() && !page.url.pathname.startsWith(loginPath)) {
+		const isDriverRoute = page.url.pathname.startsWith(resolve('/vozac'));
+		if (!isLoggedIn() && !page.url.pathname.startsWith(loginPath) && !isDriverRoute) {
 			goto(loginPath);
 		}
 	});
