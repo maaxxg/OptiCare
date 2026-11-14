@@ -11,6 +11,10 @@ export interface Patient {
 	willingToDrive: boolean;
 	description: string;
 	createdAt: string;
+	// Times are entered manually by the nurse only; undefined when not entered.
+	examTime?: string; // format "HH:MM", npr. "10:00"
+	departureTime?: string; // format "HH:MM", npr. "07:30"
+	returnTime?: string; // format "HH:MM", npr. "16:00"
 }
 
 const STORAGE_KEY = 'opticare.patients';
@@ -39,12 +43,13 @@ export function getPatients(): Patient[] {
 }
 
 export function addPatient(patient: Omit<Patient, 'id' | 'createdAt'>): Patient {
+	// Times are stored exactly as entered; nothing is generated or defaulted.
 	const newPatient: Patient = {
 		...patient,
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString()
 	};
-	patients = [...patients, newPatient];
+	patients = [newPatient, ...patients];
 	save(patients);
 	return newPatient;
 }

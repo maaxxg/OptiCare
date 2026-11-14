@@ -1,10 +1,9 @@
 <script lang="ts">
+	import logo from '#lib/assets/opticare-logo.svg';
 	import { getPatients, type Patient } from '#lib/stores/patients.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
-	// Nothing is planned yet: there is no planner/assignment API. Requests are
-	// shown as received, with no invented times, until assignments exist.
 	const patients: Patient[] = getPatients();
 
 	const groups = [
@@ -27,7 +26,7 @@
 
 <div class="page-wide">
 	<div class="schedule-top-nav">
-		<div class="logo-dot"></div>
+		<img src={logo} alt="OptiCare" class="logo-full" />
 		<button class="back-link" onclick={() => goto(resolve('/'))}>← Povratak</button>
 	</div>
 
@@ -48,8 +47,8 @@
 		<p class="empty-state">Još nema unesenih zahtjeva.</p>
 	{:else}
 		<p class="page-subtitle">
-			Termini i prijevoz još nisu planirani. Vremena će biti prikazana nakon što medicinska sestra
-			potvrdi plan.
+			Termini i prijevoz još nisu planirani. Prikazana su samo ručno unesena vremena; ako vremena
+			nisu unesena, prikazuje se „—”.
 		</p>
 
 		<div class="schedule-table-wrap">
@@ -78,9 +77,15 @@
 										</div>
 										<div class="col-exam">{p.description}</div>
 										<div class="col-clinic">{p.location}</div>
-										<span class="center-col"><span class="time-badge-pill">—</span></span>
-										<span class="center-col"><span class="time-badge-pill">—</span></span>
-										<span class="center-col"><span class="time-badge-pill">—</span></span>
+										<span class="center-col">
+											<span class="time-badge-pill">{p.departureTime ?? '—'}</span>
+										</span>
+										<span class="center-col">
+											<span class="time-badge-pill">{p.examTime ?? '—'}</span>
+										</span>
+										<span class="center-col">
+											<span class="time-badge-pill">{p.returnTime ?? '—'}</span>
+										</span>
 									</div>
 								{/each}
 							</div>

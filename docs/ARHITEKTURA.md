@@ -116,7 +116,7 @@ Jedan zahtjev prolazi pet koraka, od poziva do potvrđene vožnje.
 
 1. **Poziv.** Pacijent zove svoju ordinaciju obiteljske medicine, gdje se izdaje eUputnica. Sestra upisuje u obrazac ili zalijepi bilješke ili transkript. Pacijenta koji ide vlastitim autom pita bi li povezao nekoga iz svog mjesta, a pacijenta bez prijevoza pristaje li na vožnju sa sumještaninom.
 2. **Izdvajanje.** Modul unosa šalje slobodni tekst LLM-u i dobiva JSON prema shemama Pacijenta i Zahtjeva. Polja koja nedostaju ili nisu valjana označe se sestri i nikad se ne pogađaju. Adresa se geokodira, a sestra potvrđuje točku na karti.
-3. **Bodovanje i procjene.** Modul bodovanja računa potrebu za podrškom s doprinosom svakog faktora. Provjera prava označava ispunjava li pacijent uvjete za sanitetski prijevoz ili putni nalog HZZO-a i priprema podatke za nalog koji izdaje izabrani liječnik. Sloj prediktora vraća trajanje pregleda i vrijeme ukrcaja.
+3. **Bodovanje i procjene.** Modul bodovanja računa potrebu za podrškom s doprinosom svakog faktora. Razina nikad nije niža od najniže razine za klasu pokretljivosti iz `scoring_factors.yaml` (npr. pacijent na nosilima uvijek ima barem „visoku“); bod je može samo podići. Provjera prava označava ispunjava li pacijent uvjete za sanitetski prijevoz ili putni nalog HZZO-a i priprema podatke za nalog koji izdaje izabrani liječnik. Sloj prediktora vraća trajanje pregleda i vrijeme ukrcaja.
 4. **Plan.** Planer rješava sve otvorene zahtjeve za ciljani dan: termin, vozilo, redoslijed ukrcaja, povratak. Vrti se noću za idući dan i ponovno na zahtjev kad se zahtjev doda ili otkaže.
 5. **Potvrda i obavijest.** Sestra pregleda plan na ploči, po potrebi ga izmijeni i potvrdi. Modul obavijesti iz fiksnog predloška piše poruku jednostavnim hrvatskim i šalje je SMS-om, automatskim pozivom ili ispisom. Svaka poruka sadrži broj telefona na koji pacijent može dobiti živu osobu.
 
@@ -233,7 +233,7 @@ FastAPI backend ima jednu skupinu krajnjih točaka po modulu.
 | Unos | `POST /intake/extract` | Slobodni tekst ili transkript u strukturirani zapis |
 | Unos | `POST /patients/lookup` | Pronalazak postojećeg pacijenta po MBO-u (MBO u tijelu zahtjeva, nikad u URL-u) |
 | Unos | `POST /patients`, `POST /requests` | Spremanje potvrđenog zapisa |
-| Bodovanje | `GET /score/{patient_id}` | Potreba za podrškom s doprinosima faktora |
+| Bodovanje | `GET /score/{patient_id}?request_id=` | Potreba za podrškom s doprinosima faktora; neobavezni `request_id` daje udaljenost do ustanove zahtjeva preko adaptera za rute, bez njega je udaljenost nepoznata (označena) |
 | ML | `POST /predict/{slot}` | Predikcija registriranog prediktora za to mjesto |
 | ML | `GET /models` | Aktivna implementacija i verzija po mjestu |
 | Planer | `POST /plan/solve?date=` | Rješavanje i povrat predloženih dodjela |

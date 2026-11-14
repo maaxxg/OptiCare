@@ -1,5 +1,9 @@
 # Faktori i težine bodovanja potrebe za podrškom (E13-T3, KAN-89). Ulaz za E3-T1.
-# SINTETIČKI NACRT: težine, pojasevi i pragovi su procjene za pregled domenskog člana tima.
+# SINTETIČKI NACRT: težine, pojasevi i pragovi su procjene; za njih nije pronađen dobar izvor.
+# Kalibracija (14. 11. 2026.) na 18 demo profila sa stvarnim cestovnim udaljenostima (OSRM):
+# razine 6 niska / 9 srednja / 3 visoka; visoku dobivaju p03 (nosila, 90 g.), p11 (82 g., sam, 76 km)
+# i p18 (sama, 3. kat bez lifta, 3 propuštena pregleda). Prije su nosila i kolica s pratnjom
+# ostajala na srednjoj razini, ispod pokretnih pacijenata, pa je pokretljivost dobila veću težinu.
 #
 # PRAVILO (CLAUDE.md, pravilo 1): bodovi i razine SAMO DODAJU pomoć. Nijedan faktor, prag ni
 # razina ne smije ukloniti, odbiti ni deprioritizirati pacijenta. Visoka razina znači više pomoći,
@@ -14,19 +18,19 @@
 factors:
   - key: mobility_class
     label: Pokretljivost
-    weight: 0.22              # REVIEW: težina
+    weight: 0.30              # PROCJENA (nije pronađen dobar izvor); najjači pokazatelj potrebe za pomoći
     mapping:                  # tablica po klasi pokretljivosti
       walks: 0.0
-      cane: 0.4               # REVIEW: vrijednosti
+      cane: 0.4               # PROCJENA (nije pronađen dobar izvor)
       wheelchair: 0.8
       stretcher: 1.0
     rationale: Slabija pokretljivost znači više pomoći pri ukrcaju i na putu.
 
   - key: distance_to_destination
     label: Udaljenost do odredišta
-    weight: 0.18              # REVIEW: težina
+    weight: 0.17              # PROCJENA (nije pronađen dobar izvor)
     unit: km                  # cestovna udaljenost
-    bands:                    # REVIEW: pojasevi u km
+    bands:                    # PROCJENA (nije pronađen dobar izvor); 50 km = prag putnog naloga
       - {max: 20,   value: 0.0}
       - {max: 50,   value: 0.4}
       - {max: 100,  value: 0.7}
@@ -34,10 +38,11 @@ factors:
     rationale: Dulji put je zahtjevniji, a tolerancija na kašnjenje manja.
 
   - key: age
+    # Dob = tekuća godina − godina rođenja (dob koju pacijent navršava ove godine).
     label: Dob
-    weight: 0.15              # REVIEW: težina
+    weight: 0.15              # PROCJENA (nije pronađen dobar izvor)
     unit: years
-    bands:                    # REVIEW: pojasevi u godinama
+    bands:                    # PROCJENA (nije pronađen dobar izvor); 65 = uobičajena granica starije dobi (DZS)
       - {max: 65,   value: 0.0}
       - {max: 75,   value: 0.4}
       - {max: 85,   value: 0.7}
@@ -46,16 +51,16 @@ factors:
 
   - key: lives_alone
     label: Živi sam
-    weight: 0.15              # REVIEW: težina
+    weight: 0.12              # PROCJENA (nije pronađen dobar izvor)
     if_true: 1.0
     if_false: 0.0
     rationale: Tko živi sam, nema kod kuće nikoga tko bi podsjetio ili pomogao.
 
   - key: missed_visits_last_year
     label: Propušteni pregledi u zadnjih godinu dana
-    weight: 0.12              # REVIEW: težina
+    weight: 0.12              # PROCJENA (nije pronađen dobar izvor)
     unit: count
-    bands:                    # REVIEW: pojasevi
+    bands:                    # PROCJENA (nije pronađen dobar izvor)
       - {max: 1,    value: 0.0}   # 0 propuštenih
       - {max: 2,    value: 0.5}   # 1 propušten
       - {max: null, value: 1.0}   # 2 ili više
@@ -63,8 +68,8 @@ factors:
 
   - key: phone_type
     label: Vrsta telefona
-    weight: 0.10              # REVIEW: težina
-    mapping:                  # REVIEW: vrijednosti
+    weight: 0.09              # PROCJENA (nije pronađen dobar izvor)
+    mapping:                  # PROCJENA (nije pronađen dobar izvor)
       smartphone: 0.0
       basic_mobile: 0.5
       landline: 1.0
@@ -72,14 +77,20 @@ factors:
 
   - key: companion_available
     label: Dostupnost pratnje
-    weight: 0.08              # REVIEW: težina; preklapa se s faktorom "Živi sam", provjeriti je li dvostruko brojanje prihvatljivo
+    weight: 0.05              # PROCJENA (nije pronađen dobar izvor); mala težina jer se u demo podacima potpuno poklapa sa "Živi sam" (7/7)
     if_true: 0.0
     if_false: 1.0
     rationale: Bez pratnje pacijent sve obavlja sam pa treba više pomoći.
 
+# Najniža razina po klasi pokretljivosti (odluka tima 14. 11. 2026.). Bod može razinu samo
+# podići iznad ove granice, nikad spustiti ispod nje. Pacijent na nosilima ne može sjediti i
+# uvijek mu treba najviše pomoći, i kad je mlad, blizu i ima pratnju (bod tada može biti 0,30).
+min_level_by_mobility:
+  stretcher: high
+
 # Razine usluge po ukupnom bodu (donja granica uključiva, gornja isključiva).
 # Razina bira samo pomoć koja se DODAJE.
-# REVIEW: pragovi
+# PROCJENA (nije pronađen dobar izvor): pragovi 0,35 i 0,60 provjereni na demo profilima (vidi kalibraciju gore).
 levels:
   - key: low
     label: Niska

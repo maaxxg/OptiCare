@@ -164,3 +164,20 @@ def test_factory_ors_requires_key(monkeypatch):
         factories.get_routing_client()
     _settings(monkeypatch, routing_backend="ors", ors_api_key="k")
     assert isinstance(factories.get_routing_client(), OrsRoutingClient)
+
+
+def test_routing_client_is_reused(monkeypatch):
+    factories._ors_routing_client.cache_clear()
+    _settings(monkeypatch, routing_backend="ors", ors_api_key="k")
+    assert factories.get_routing_client() is factories.get_routing_client()
+    factories._ors_routing_client.cache_clear()
+
+
+def test_check_routing_config(monkeypatch):
+    from app.main import StartupCheckError, check_routing_config
+
+    _settings(monkeypatch, routing_backend="ors")
+    with pytest.raises(StartupCheckError, match="Routing adapter"):
+        check_routing_config()
+    _settings(monkeypatch, routing_backend="mock")
+    check_routing_config()
