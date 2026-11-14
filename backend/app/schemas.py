@@ -425,3 +425,82 @@ class TripLogRead(TripLogBase):
 
     id: int
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Intake & Geocoding (E2-T1, E2-T3, E11-T1)
+# ---------------------------------------------------------------------------
+
+
+class GeocodeRequest(BaseModel):
+    address: str = Field(..., min_length=1, max_length=255)
+    settlement: str | None = Field(default=None, max_length=120)
+
+
+class GeocodeResponse(BaseModel):
+    location: GeoPoint
+    settlement: str
+    municipality: str
+    county: str
+
+
+class ExtractedPatientDraft(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    birth_year: int | None = Field(default=None, ge=1900, le=2100)
+    mbo: str | None = Field(default=None, repr=False)
+    phone: str | None = Field(default=None, min_length=3, max_length=40)
+    phone_type: PhoneType | None = None
+
+    address: str | None = Field(default=None, max_length=255)
+    settlement: str | None = Field(default=None, min_length=1, max_length=120)
+    municipality: str | None = Field(default=None, min_length=1, max_length=120)
+    county: str | None = Field(default=None, min_length=1, max_length=120)
+    location: GeoPoint | None = None
+
+    mobility_class: MobilityClass | None = None
+    lives_alone: bool | None = None
+    companion: bool | None = None
+    floor: int | None = Field(default=None, ge=-2, le=50)
+    elevator: bool | None = None
+
+    transport_entitlement: TransportEntitlement | None = None
+    social_order_today: bool | None = None
+
+    own_car: bool | None = None
+    carpool_driver_seats: int | None = Field(default=None, ge=0, le=8)
+    carpool_rider_consent: bool | None = None
+    driver_documents_confirmed: bool | None = None
+
+    missed_visits_last_year: int | None = Field(default=None, ge=0)
+
+    @field_validator("location", mode="before")
+    @classmethod
+    def _validate_location(cls, v: Any) -> Any:
+        return _coerce_geopoint(v)
+
+
+class ExtractedVisitRequestDraft(BaseModel):
+    referral_ref: str | None = Field(default=None, max_length=64)
+    facility_key: str | None = Field(default=None, max_length=64)
+    facility_id: int | None = None
+    department: Department | None = None
+    visit_type: VisitType | None = None
+    urgency_class: UrgencyClass | None = None
+    earliest_date: date | None = None
+    latest_date: date | None = None
+    recurrence: str | None = Field(default=None, max_length=64)
+    preferred_time_of_day: str | None = Field(default=None, max_length=32)
+
+
+class IntakeExtractRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class IntakeExtractResponse(BaseModel):
+    patient: ExtractedPatientDraft
+    visit_request: ExtractedVisitRequestDraft
+    for_review: list[str] = Field(default_factory=list)
+    mbo_stripped: bool = False
