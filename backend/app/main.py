@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session, selectinload
 from app.adapters import get_geocoding_client, get_routing_client
 from app.adapters.geocoding import GeocodingClient, _normalize
 from app.adapters.llm import LLMClient
-from app.codebooks import Codebooks, get_codebooks, get_urgency_max_shift_days
+from app.codebooks import (
+    CodebookError,
+    Codebooks,
+    get_codebooks,
+    get_urgency_max_shift_days,
+    time_of_day_for_hour,
+    time_of_day_keys,
+)
 from app.config import get_settings
 from app.db import get_db
 from app.intake import extract_intake, get_intake_llm_client
@@ -93,6 +100,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         get_scoring_config()
     except ScoringConfigError as exc:
         raise StartupCheckError(f"Scoring configuration is invalid: {exc}") from exc
+    try:
+        get_codebooks()
+    except CodebookError as exc:
+        raise StartupCheckError(f"Codebooks are invalid: {exc}") from exc
     check_routing_config()
     if get_settings().check_db_on_startup:
         from app.db import engine
@@ -216,8 +227,11 @@ def create_or_update_patient(
     municipality = payload.municipality
     county = payload.county
 
-    if geo_point is None:
-        query = f"{payload.address}, {settlement}" if payload.address else settlement
+    if geo_point is None and (existing is None or _location_needs_geocoding(existing, payload)):
+        address = payload.address
+        if existing is not None and "address" not in sent:
+            address = existing.address
+        query = f"{address}, {settlement}" if address else settlement
         resolved = geocoding_client.geocode_address(query) or geocoding_client.geocode_address(
             settlement
         )
@@ -277,15 +291,27 @@ def create_or_update_patient(
     return patient
 
 
+def _location_needs_geocoding(existing: Patient, payload: PatientCreate) -> bool:
+    """On update without a payload location: keep a stored (possibly map-confirmed) point
+    unless there is none or the address or settlement changed."""
+    if existing.location is None:
+        return True
+
+    def key(value: str | None) -> str:
+        return _normalize(value or "").strip()
+
+    address_changed = "address" in payload.model_fields_set and key(existing.address) != key(
+        payload.address
+    )
+    return address_changed or key(existing.settlement) != key(payload.settlement)
+
+
 def _matches_time_of_day(dt: datetime, preferred: str | None) -> bool:
     if not preferred:
         return True
-    hour = dt.astimezone(ZAGREB_TZ).hour
-    if preferred == "morning":
-        return hour < 12
-    if preferred == "afternoon":
-        return hour >= 12
-    return True
+    if preferred not in time_of_day_keys():
+        return True
+    return time_of_day_for_hour(dt.astimezone(ZAGREB_TZ).hour) == preferred
 
 
 def _open_slots_in_range(

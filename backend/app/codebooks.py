@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.config import get_settings
 from app.models import Department, MobilityClass, UrgencyClass, VisitType
@@ -50,6 +50,13 @@ class VisitDurationEntry(BaseModel):
     p90_min: int = Field(..., ge=1)
 
 
+class TimeOfDayEntry(BaseModel):
+    key: str
+    label: str
+    # Exclusive upper bound of the part of day, in Europe/Zagreb local hours.
+    before_hour: int = Field(..., ge=1, le=24)
+
+
 class Codebooks(BaseModel):
     mobility_classes: list[MobilityClassEntry]
     departments: list[DepartmentEntry]
@@ -57,6 +64,22 @@ class Codebooks(BaseModel):
     urgency_classes: list[UrgencyClassEntry]
     visit_durations: list[VisitDurationEntry]
     boarding_time_min: dict[MobilityClass, int]
+    times_of_day: list[TimeOfDayEntry]
+
+    @model_validator(mode="after")
+    def _check_times_of_day(self) -> Codebooks:
+        entries = self.times_of_day
+        if not entries:
+            raise ValueError("times_of_day must not be empty")
+        keys = [e.key for e in entries]
+        if len(set(keys)) != len(keys):
+            raise ValueError("times_of_day keys must be unique")
+        hours = [e.before_hour for e in entries]
+        if any(a >= b for a, b in zip(hours, hours[1:], strict=False)):
+            raise ValueError("times_of_day before_hour must be strictly increasing")
+        if hours[-1] != 24:
+            raise ValueError("the last times_of_day entry must end at hour 24")
+        return self
 
 
 def load_codebooks_from_path(yaml_path: Path | None = None) -> Codebooks:
@@ -123,3 +146,15 @@ def get_visit_duration(
         if entry.department == dept and entry.visit_type == vtype:
             return entry
     raise CodebookError(f"No visit duration for {dept.value}/{vtype.value} in codebooks")
+
+
+def time_of_day_keys() -> list[str]:
+    return [entry.key for entry in get_codebooks().times_of_day]
+
+
+def time_of_day_for_hour(hour: int) -> str:
+    """Key of the part of day a local hour (0-23) belongs to."""
+    for entry in get_codebooks().times_of_day:
+        if hour < entry.before_hour:
+            return entry.key
+    raise CodebookError(f"Hour outside 0-23: {hour!r}")

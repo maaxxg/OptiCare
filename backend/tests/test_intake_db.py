@@ -150,6 +150,48 @@ def test_post_patients_update_keeps_location_when_geocoding_fails(client: TestCl
     assert again.json()["location"] == location
 
 
+def test_update_keeps_confirmed_location_unless_address_changes(client: TestClient) -> None:
+    precise = {"lat": 44.8, "lon": 15.2}
+    first = client.post("/patients", json={**_REQUIRED, "address": "Ulica 1", "location": precise})
+    assert first.status_code == 201
+    assert first.json()["location"]["lat"] == pytest.approx(44.8, abs=1e-6)
+
+    # (a) only the phone changes: the map-confirmed point must survive.
+    same = client.post(
+        "/patients", json={**_REQUIRED, "address": " ulica 1 ", "phone": "+385 00 222 0016"}
+    )
+    assert same.status_code == 200
+    assert same.json()["location"]["lat"] == pytest.approx(44.8, abs=1e-6)
+    assert same.json()["location"]["lon"] == pytest.approx(15.2, abs=1e-6)
+
+    # (b) address changed: geocoded again (settlement centre from the mock).
+    moved = client.post("/patients", json={**_REQUIRED, "address": "Ulica 2"})
+    assert moved.status_code == 200
+    assert moved.json()["location"]["lat"] == pytest.approx(44.75986, abs=1e-4)
+
+
+def test_update_without_address_key_keeps_confirmed_location(client: TestClient) -> None:
+    payload = {**_REQUIRED, "address": "Ulica 1", "location": {"lat": 44.8, "lon": 15.2}}
+    assert client.post("/patients", json=payload).status_code == 201
+    again = client.post("/patients", json={**_REQUIRED, "phone": "+385 00 444 0016"})
+    assert again.status_code == 200
+    assert again.json()["location"]["lat"] == pytest.approx(44.8, abs=1e-6)
+    assert again.json()["location"]["lon"] == pytest.approx(15.2, abs=1e-6)
+
+
+def test_update_geocodes_when_stored_patient_has_no_location(
+    client: TestClient, db: Session
+) -> None:
+    from sqlalchemy import text
+
+    assert client.post("/patients", json=_REQUIRED).status_code == 201
+    db.execute(text("UPDATE patients SET location = NULL"))
+    db.commit()
+    again = client.post("/patients", json={**_REQUIRED, "phone": "+385 00 333 0016"})
+    assert again.status_code == 200
+    assert again.json()["location"]["lat"] == pytest.approx(44.75986, abs=1e-4)
+
+
 def test_post_patients_same_name_matches_ignoring_case_and_diacritics(
     client: TestClient,
 ) -> None:

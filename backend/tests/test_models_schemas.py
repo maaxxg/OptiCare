@@ -404,7 +404,8 @@ def test_preferred_time_of_day_accepts_only_codebook_values() -> None:
         latest_date=date(2026, 11, 20),
     )
     assert VisitRequestCreate(**kw).preferred_time_of_day is None
-    assert VisitRequestCreate(**kw, preferred_time_of_day="afternoon").preferred_time_of_day
+    for key in ("morning", "afternoon"):
+        assert VisitRequestCreate(**kw, preferred_time_of_day=key).preferred_time_of_day == key
     with pytest.raises(ValidationError, match="Željeni dio dana"):
         VisitRequestCreate(**kw, preferred_time_of_day="ujutro")
 
