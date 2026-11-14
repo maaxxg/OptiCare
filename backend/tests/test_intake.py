@@ -403,3 +403,23 @@ def test_geocode_endpoint_returns_coordinates_and_administrative_units(
 
     unknown = client.post("/intake/geocode", json={"address": "Ilica 1, Zagreb"})
     assert unknown.status_code == 404
+
+
+def test_mbo_never_in_path_or_query_parameters() -> None:
+    for path, item in app.openapi()["paths"].items():
+        assert "mbo" not in path.lower()
+        for op in item.values():
+            for param in op.get("parameters", []):
+                assert param["name"].lower() != "mbo", f"{path}: MBO must not be in the URL"
+
+
+def test_patient_lookup_invalid_mbo_is_422_and_not_echoed() -> None:
+    # FastAPI resolves get_db before body validation, so stub the session (never queried).
+    app.dependency_overrides[get_db] = lambda: None
+    try:
+        resp = TestClient(app).post("/patients/lookup", json={"mbo": "12345"})
+    finally:
+        app.dependency_overrides.clear()
+    assert resp.status_code == 422
+    assert "12345" not in resp.text
+    assert "MBO mora sadržavati točno 9 znamenki." in resp.text

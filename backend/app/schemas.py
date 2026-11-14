@@ -149,6 +149,38 @@ class PatientBase(BaseModel):
         return _coerce_geopoint(v)
 
 
+def _clean_mbo(v: str) -> str:
+    cleaned = v.strip()
+    if not _MBO_RE.match(cleaned):
+        raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
+    return cleaned
+
+
+def _mask_mbo_errors(title: str, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
+    # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
+    # 422 bodies) still carries the input. Rebuild the error without the MBO value.
+    try:
+        return handler(data)
+    except ValidationError as exc:
+        lines: list[InitErrorDetails] = []
+        for err in exc.errors():
+            is_mbo = err["loc"][:1] == ("mbo",)
+            kind: Any = (
+                PydanticCustomError(err["type"], err["msg"])
+                if err["type"] == "mbo_format"
+                else err["type"]
+            )
+            line: InitErrorDetails = {
+                "type": kind,
+                "loc": err["loc"],
+                "input": "***" if is_mbo else err["input"],
+            }
+            if "ctx" in err and not is_mbo:
+                line["ctx"] = err["ctx"]
+            lines.append(line)
+        raise ValidationError.from_exception_data(title, lines, hide_input=True) from None
+
+
 class PatientCreate(PatientBase):
     model_config = ConfigDict(hide_input_in_errors=True)
 
@@ -161,38 +193,30 @@ class PatientCreate(PatientBase):
     @model_validator(mode="wrap")
     @classmethod
     def _mask_mbo_in_errors(cls, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
-        # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
-        # 422 bodies) still carries the input. Rebuild the error without the MBO value.
-        try:
-            return handler(data)
-        except ValidationError as exc:
-            lines: list[InitErrorDetails] = []
-            for err in exc.errors():
-                is_mbo = err["loc"][:1] == ("mbo",)
-                kind: Any = (
-                    PydanticCustomError(err["type"], err["msg"])
-                    if err["type"] == "mbo_format"
-                    else err["type"]
-                )
-                line: InitErrorDetails = {
-                    "type": kind,
-                    "loc": err["loc"],
-                    "input": "***" if is_mbo else err["input"],
-                }
-                if "ctx" in err and not is_mbo:
-                    line["ctx"] = err["ctx"]
-                lines.append(line)
-            raise ValidationError.from_exception_data(
-                cls.__name__, lines, hide_input=True
-            ) from None
+        return _mask_mbo_errors(cls.__name__, data, handler)
 
     @field_validator("mbo")
     @classmethod
     def _validate_mbo(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not _MBO_RE.match(cleaned):
-            raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
-        return cleaned
+        return _clean_mbo(v)
+
+
+class PatientLookup(BaseModel):
+    """Body of POST /patients/lookup: the MBO travels in the body, never in a URL."""
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    mbo: str = Field(..., repr=False, description="Matični broj osigurane osobe (9 znamenki)")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _mask_mbo_in_errors(cls, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
+        return _mask_mbo_errors(cls.__name__, data, handler)
+
+    @field_validator("mbo")
+    @classmethod
+    def _validate_mbo(cls, v: str) -> str:
+        return _clean_mbo(v)
 
 
 class PatientUpdate(BaseModel):

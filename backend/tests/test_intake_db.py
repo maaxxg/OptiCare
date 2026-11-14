@@ -72,10 +72,13 @@ def test_post_patients_deduplicates_by_mbo_and_auto_geocodes(client: TestClient)
     assert p2["phone"] == "+385 00 999 0006"
     assert p2["mobility_class"] == "cane"
 
-    by_mbo = client.get("/patients", params={"mbo": "000000006"})
+    by_mbo = client.post("/patients/lookup", json={"mbo": "000000006"})
     assert by_mbo.status_code == 200
     assert len(by_mbo.json()) == 1
     assert by_mbo.json()[0]["id"] == p1["id"]
+    assert by_mbo.json()[0]["mbo_masked"] == "*****0006"
+    assert "000000006" not in by_mbo.text
+    assert client.post("/patients/lookup", json={"mbo": "000000007"}).json() == []
 
 
 def test_post_requests_generates_candidate_slots_or_sets_pending(

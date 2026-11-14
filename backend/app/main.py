@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import Connection, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -32,6 +32,7 @@ from app.schemas import (
     IntakeExtractRequest,
     IntakeExtractResponse,
     PatientCreate,
+    PatientLookup,
     PatientRead,
     VisitRequestCreate,
     VisitRequestRead,
@@ -140,14 +141,14 @@ def list_facilities(db: DbSession) -> list[Facility]:
 
 
 @app.get("/patients", response_model=list[PatientRead])
-def list_patients(
-    db: DbSession,
-    mbo: Annotated[str | None, Query(min_length=9, max_length=9)] = None,
-) -> list[Patient]:
-    stmt = select(Patient).order_by(Patient.id)
-    if mbo is not None:
-        stmt = stmt.where(Patient.mbo == mbo.strip())
-    return list(db.scalars(stmt).all())
+def list_patients(db: DbSession) -> list[Patient]:
+    return list(db.scalars(select(Patient).order_by(Patient.id)).all())
+
+
+@app.post("/patients/lookup", response_model=list[PatientRead])
+def lookup_patient(payload: PatientLookup, db: DbSession) -> list[Patient]:
+    # MBO only in the body, never in a URL (access logs, proxies). Do not log the payload.
+    return list(db.scalars(select(Patient).where(Patient.mbo == payload.mbo)).all())
 
 
 @app.post("/patients", response_model=PatientRead, status_code=status.HTTP_201_CREATED)
