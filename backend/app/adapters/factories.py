@@ -30,6 +30,12 @@ def get_llm_client() -> LLMClient:
     raise _not_implemented("LLM", backend)
 
 
+@lru_cache
+def _ors_routing_client(api_key: str, base_url: str, timeout_s: float) -> OrsRoutingClient:
+    # One client (and httpx connection pool) per configuration, reused across requests.
+    return OrsRoutingClient(api_key=api_key, base_url=base_url, timeout_s=timeout_s)
+
+
 def get_routing_client() -> RoutingClient:
     settings = get_settings()
     backend = settings.routing_backend
@@ -39,9 +45,7 @@ def get_routing_client() -> RoutingClient:
         key = settings.ors_api_key.get_secret_value()
         if not key:
             raise ValueError("ROUTING_BACKEND=ors requires ORS_API_KEY to be set")
-        return OrsRoutingClient(
-            api_key=key, base_url=settings.ors_base_url, timeout_s=settings.ors_timeout_s
-        )
+        return _ors_routing_client(key, settings.ors_base_url, settings.ors_timeout_s)
     raise _not_implemented("Routing", backend)
 
 
