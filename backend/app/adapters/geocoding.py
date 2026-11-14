@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Protocol
@@ -168,6 +169,10 @@ def _normalize(text: str) -> str:
     return stripped.replace("đ", "d")
 
 
+def _has_word(q: str, token: str) -> bool:
+    return re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", q) is not None
+
+
 class MockGeocodingClient:
     def geocode_address(self, query: str) -> GeocodedAddress | None:
         q = _normalize(query).strip()
@@ -177,9 +182,9 @@ class MockGeocodingClient:
         for entry in SETTLEMENT_DIRECTORY:
             if q == _normalize(entry.address.settlement):
                 return entry.address
-        # Substring / token match in priority order.
+        # Whole-word token match in priority order ("licko-senjska" must not hit "senj").
         for entry in SETTLEMENT_DIRECTORY:
-            if any(token in q for token in entry.tokens):
+            if any(_has_word(q, token) for token in entry.tokens):
                 return entry.address
         return None
 

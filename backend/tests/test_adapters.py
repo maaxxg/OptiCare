@@ -25,6 +25,25 @@ def test_mock_llm_returns_canned_response():
     assert MockLLMClient('{"a": 1}').complete("s", "u") == '{"a": 1}'
 
 
+def test_mock_llm_is_dumb_and_accepts_responder():
+    assert MockLLMClient().complete('"patient" "visit_request"', "u") == "{}"
+    assert MockLLMClient(responder=lambda s, u: f"{s}|{u}").complete("s", "u") == "s|u"
+
+
+def test_mock_geocoding_matches_whole_words_only():
+    geo = MockGeocodingClient()
+    assert geo.geocode_address("Ličko-senjska županija") is None
+    for query, settlement in (
+        ("Senj", "Senj"),
+        ("u Senju", "Senj"),
+        ("53270", "Senj"),
+        ("Donji Kosinj bb", "Donji Kosinj"),
+        ("Lički Osik", "Lički Osik"),
+    ):
+        found = geo.geocode_address(query)
+        assert found is not None and found.settlement == settlement, query
+
+
 def test_mock_routing_matrix_shape_and_plausible_values():
     geo = MockGeocodingClient()
     gospic = geo.geocode("Gospić")

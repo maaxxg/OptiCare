@@ -10,7 +10,6 @@ import yaml
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.adapters import get_llm_client
 from app.adapters.geocoding import MockGeocodingClient
 from app.adapters.llm import MockLLMClient
 from app.config import get_settings
@@ -20,6 +19,7 @@ from app.intake import (
     REQUIRED_REVIEW_FIELDS,
     SYSTEM_PROMPT_HR,
     extract_intake,
+    get_intake_llm_client,
     offline_answer,
     strip_mbo_from_text,
 )
@@ -33,11 +33,15 @@ from app.models import (
 from app.schemas import ExtractedPatientDraft, ExtractedVisitRequestDraft
 
 
+def _offline_llm() -> MockLLMClient:
+    return MockLLMClient(responder=lambda _system, user: offline_answer(user))
+
+
 class SpyLLMClient:
     """Test double that records the exact prompt sent to the LLM (E11-T1)."""
 
     def __init__(self, delegate: Any | None = None) -> None:
-        self.delegate = delegate or MockLLMClient()
+        self.delegate = delegate or _offline_llm()
         self.calls: list[tuple[str, str]] = []
 
     def complete(self, system: str, user: str) -> str:
@@ -331,7 +335,7 @@ def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestCli
         }
     )
     spy = SpyLLMClient(delegate=MockLLMClient(response=llm_json))
-    app.dependency_overrides[get_llm_client] = lambda: spy
+    app.dependency_overrides[get_intake_llm_client] = lambda: spy
 
     resp = client.post(
         "/intake/extract",
@@ -384,7 +388,7 @@ def test_offline_answer_is_canned_only() -> None:
     assert offline_answer("Nešto potpuno neprogramirano, Marko Marić iz Senja.") == "{}"
     result = extract_intake(
         "Nešto potpuno neprogramirano, Marko Marić iz Senja.",
-        llm_client=MockLLMClient(),
+        llm_client=_offline_llm(),
         geocoding_client=MockGeocodingClient(),
     )
     assert {name for _, name in REQUIRED_REVIEW_FIELDS} <= set(result.for_review)
@@ -396,7 +400,7 @@ def test_e2_acceptance_sentence_with_mock_llm() -> None:
     result = extract_intake(
         "Živim sama u Donjem Selu, hodam sa štapom, kćer dolazi samo utorkom, "
         "imam kontrolu kod kardiologa.",
-        llm_client=MockLLMClient(),
+        llm_client=_offline_llm(),
         geocoding_client=MockGeocodingClient(),
     )
     assert result.patient.mobility_class == MobilityClass.CANE
@@ -405,8 +409,35 @@ def test_e2_acceptance_sentence_with_mock_llm() -> None:
     assert result.patient.companion is None
     assert result.visit_request.department == Department.CARDIOLOGY
     assert result.visit_request.visit_type == VisitType.FOLLOW_UP
-    for field in ("first_name", "last_name", "mbo", "phone", "urgency_class"):
+    for field in ("first_name", "last_name", "mbo", "phone", "urgency_class", "location"):
         assert field in result.for_review
+    assert result.patient.location is None
+
+
+def test_unknown_settlement_flags_location_for_review() -> None:
+    llm_json = json.dumps({"patient": {"settlement": "Donje Selo"}})
+    result = extract_intake(
+        "Živi u Donjem Selu.",
+        llm_client=MockLLMClient(response=llm_json),
+        geocoding_client=MockGeocodingClient(),
+    )
+    assert result.patient.location is None
+    assert "location" in result.for_review
+
+
+def test_extract_endpoint_default_mock_is_offline_answer(client: TestClient) -> None:
+    sentence = (
+        "Živim sama u Donjem Selu, hodam sa štapom, kćer dolazi samo utorkom, "
+        "imam kontrolu kod kardiologa."
+    )
+    resp = client.post("/intake/extract", json={"text": sentence})
+    assert resp.status_code == 200
+    assert "location" in resp.json()["for_review"]
+
+    resp = client.post("/intake/extract", json={"text": "Nešto potpuno neprogramirano."})
+    assert resp.status_code == 200
+    review = resp.json()["for_review"]
+    assert {name for _, name in REQUIRED_REVIEW_FIELDS} <= set(review)
 
 
 def test_extract_intake_rejects_invalid_llm_enums_into_for_review() -> None:

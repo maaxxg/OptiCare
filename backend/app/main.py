@@ -11,13 +11,13 @@ from sqlalchemy import Connection, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
-from app.adapters import get_geocoding_client, get_llm_client
+from app.adapters import get_geocoding_client
 from app.adapters.geocoding import GeocodingClient, _normalize
 from app.adapters.llm import LLMClient
 from app.codebooks import Codebooks, get_codebooks, get_urgency_max_shift_days
 from app.config import get_settings
 from app.db import get_db
-from app.intake import extract_intake
+from app.intake import extract_intake, get_intake_llm_client
 from app.models import (
     Facility,
     Patient,
@@ -43,7 +43,7 @@ logger = logging.getLogger("uvicorn.error")
 ZAGREB_TZ = ZoneInfo("Europe/Zagreb")
 
 DbSession = Annotated[Session, Depends(get_db)]
-LlmDep = Annotated[LLMClient, Depends(get_llm_client)]
+LlmDep = Annotated[LLMClient, Depends(get_intake_llm_client)]
 GeoDep = Annotated[GeocodingClient, Depends(get_geocoding_client)]
 
 

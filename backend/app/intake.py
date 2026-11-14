@@ -12,8 +12,9 @@ from typing import Any, NamedTuple
 import yaml
 from pydantic import ValidationError
 
+from app.adapters import get_llm_client
 from app.adapters.geocoding import GeocodingClient, _normalize
-from app.adapters.llm import LLMClient
+from app.adapters.llm import LLMClient, MockLLMClient
 from app.config import get_settings
 from app.schemas import (
     ExtractedPatientDraft,
@@ -313,6 +314,13 @@ def offline_answer(text: str) -> str:
     return json.dumps(canned if canned is not None else {}, ensure_ascii=False)
 
 
+def get_intake_llm_client() -> LLMClient:
+    """Offline: mock answering canned examples only; otherwise the configured client."""
+    if get_settings().llm_backend == "mock":
+        return MockLLMClient(responder=lambda _system, user: offline_answer(user))
+    return get_llm_client()
+
+
 def _validate_partial_model[M: (ExtractedPatientDraft, ExtractedVisitRequestDraft)](
     model_cls: type[M],
     raw: dict[str, Any],
@@ -383,6 +391,8 @@ def extract_intake(
             patient_draft.county = geocoded.county
         if patient_draft.location is None:
             patient_draft.location = GeoPoint(lat=geocoded.lat, lon=geocoded.lon)
+    elif geo_query:
+        invalid_fields.append("location")
 
     if (
         visit_draft.earliest_date is not None
