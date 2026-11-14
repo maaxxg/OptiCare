@@ -149,6 +149,47 @@ class PatientBase(BaseModel):
         return _coerce_geopoint(v)
 
 
+def _clean_mbo(v: str) -> str:
+    cleaned = v.strip()
+    if not _MBO_RE.match(cleaned):
+        raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
+    return cleaned
+
+
+def _scrub_mbo(value: Any) -> Any:
+    """Copy of an error input with every `mbo` key masked (`missing` errors carry the body)."""
+    if isinstance(value, dict):
+        return {k: "***" if k == "mbo" else _scrub_mbo(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_mbo(v) for v in value]
+    return value
+
+
+def _mask_mbo_errors(title: str, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
+    # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
+    # 422 bodies) still carries the input. Rebuild the error without the MBO value.
+    try:
+        return handler(data)
+    except ValidationError as exc:
+        lines: list[InitErrorDetails] = []
+        for err in exc.errors():
+            is_mbo = err["loc"][:1] == ("mbo",)
+            kind: Any = (
+                PydanticCustomError(err["type"], err["msg"])
+                if err["type"] == "mbo_format"
+                else err["type"]
+            )
+            line: InitErrorDetails = {
+                "type": kind,
+                "loc": err["loc"],
+                "input": "***" if is_mbo else _scrub_mbo(err["input"]),
+            }
+            if "ctx" in err and not is_mbo:
+                line["ctx"] = err["ctx"]
+            lines.append(line)
+        raise ValidationError.from_exception_data(title, lines, hide_input=True) from None
+
+
 class PatientCreate(PatientBase):
     model_config = ConfigDict(hide_input_in_errors=True)
 
@@ -161,38 +202,30 @@ class PatientCreate(PatientBase):
     @model_validator(mode="wrap")
     @classmethod
     def _mask_mbo_in_errors(cls, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
-        # `hide_input_in_errors` only affects str(); `.errors()` (used by FastAPI for
-        # 422 bodies) still carries the input. Rebuild the error without the MBO value.
-        try:
-            return handler(data)
-        except ValidationError as exc:
-            lines: list[InitErrorDetails] = []
-            for err in exc.errors():
-                is_mbo = err["loc"][:1] == ("mbo",)
-                kind: Any = (
-                    PydanticCustomError(err["type"], err["msg"])
-                    if err["type"] == "mbo_format"
-                    else err["type"]
-                )
-                line: InitErrorDetails = {
-                    "type": kind,
-                    "loc": err["loc"],
-                    "input": "***" if is_mbo else err["input"],
-                }
-                if "ctx" in err and not is_mbo:
-                    line["ctx"] = err["ctx"]
-                lines.append(line)
-            raise ValidationError.from_exception_data(
-                cls.__name__, lines, hide_input=True
-            ) from None
+        return _mask_mbo_errors(cls.__name__, data, handler)
 
     @field_validator("mbo")
     @classmethod
     def _validate_mbo(cls, v: str) -> str:
-        cleaned = v.strip()
-        if not _MBO_RE.match(cleaned):
-            raise PydanticCustomError("mbo_format", "MBO mora sadržavati točno 9 znamenki.")
-        return cleaned
+        return _clean_mbo(v)
+
+
+class PatientLookup(BaseModel):
+    """Body of POST /patients/lookup: the MBO travels in the body, never in a URL."""
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    mbo: str = Field(..., repr=False, description="Matični broj osigurane osobe (9 znamenki)")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _mask_mbo_in_errors(cls, data: Any, handler: ModelWrapValidatorHandler[Any]) -> Any:
+        return _mask_mbo_errors(cls.__name__, data, handler)
+
+    @field_validator("mbo")
+    @classmethod
+    def _validate_mbo(cls, v: str) -> str:
+        return _clean_mbo(v)
 
 
 class PatientUpdate(BaseModel):
@@ -267,6 +300,17 @@ class SlotRead(SlotBase):
 # ---------------------------------------------------------------------------
 
 
+TIMES_OF_DAY = ("morning", "afternoon")
+
+
+def _validate_time_of_day(value: str | None) -> str | None:
+    if value is not None and value not in TIMES_OF_DAY:
+        raise PydanticCustomError(
+            "time_of_day", "Željeni dio dana mora biti prijepodne ili poslijepodne."
+        )
+    return value
+
+
 class VisitRequestBase(BaseModel):
     patient_id: int
     referral_ref: str | None = Field(default=None, max_length=64)
@@ -280,6 +324,8 @@ class VisitRequestBase(BaseModel):
     preferred_time_of_day: str | None = Field(default=None, max_length=32)
     slot_request_pending: bool = False
     status: RequestStatus = Field(default=RequestStatus.OPEN)
+
+    _check_time_of_day = field_validator("preferred_time_of_day")(_validate_time_of_day)
 
     @model_validator(mode="after")
     def _check_dates(self) -> VisitRequestBase:
@@ -425,3 +471,76 @@ class TripLogRead(TripLogBase):
 
     id: int
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Intake & Geocoding (E2-T1, E2-T3, E11-T1)
+# ---------------------------------------------------------------------------
+
+
+class GeocodeRequest(BaseModel):
+    address: str = Field(..., min_length=1, max_length=255)
+    settlement: str | None = Field(default=None, max_length=120)
+
+
+class GeocodeResponse(BaseModel):
+    location: GeoPoint
+    settlement: str
+    municipality: str
+    county: str
+
+
+class ExtractedPatientDraft(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    birth_year: int | None = Field(default=None, ge=1900, le=2100)
+    mbo: str | None = Field(default=None, repr=False)
+    phone: str | None = Field(default=None, min_length=3, max_length=40)
+    phone_type: PhoneType | None = None
+
+    settlement: str | None = Field(default=None, min_length=1, max_length=120)
+    municipality: str | None = Field(default=None, min_length=1, max_length=120)
+    county: str | None = Field(default=None, min_length=1, max_length=120)
+    location: GeoPoint | None = None
+
+    mobility_class: MobilityClass | None = None
+    lives_alone: bool | None = None
+    companion: bool | None = None
+    floor: int | None = Field(default=None, ge=-2, le=50)
+    elevator: bool | None = None
+
+    own_car: bool | None = None
+    carpool_driver_seats: int | None = Field(default=None, ge=0, le=8)
+    carpool_rider_consent: bool | None = None
+
+    missed_visits_last_year: int | None = Field(default=None, ge=0)
+
+    @field_validator("location", mode="before")
+    @classmethod
+    def _validate_location(cls, v: Any) -> Any:
+        return _coerce_geopoint(v)
+
+
+class ExtractedVisitRequestDraft(BaseModel):
+    department: Department | None = None
+    visit_type: VisitType | None = None
+    urgency_class: UrgencyClass | None = None
+    earliest_date: date | None = None
+    latest_date: date | None = None
+    recurrence: str | None = Field(default=None, max_length=64)
+    preferred_time_of_day: str | None = Field(default=None, max_length=32)
+
+    _check_time_of_day = field_validator("preferred_time_of_day")(_validate_time_of_day)
+
+
+class IntakeExtractRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class IntakeExtractResponse(BaseModel):
+    patient: ExtractedPatientDraft
+    visit_request: ExtractedVisitRequestDraft
+    for_review: list[str] = Field(default_factory=list)
+    mbo_stripped: bool = False

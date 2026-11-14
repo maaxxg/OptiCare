@@ -691,3 +691,16 @@ examples:
       lives_alone: false
       companion: true
       own_car: false
+
+  - id: e35
+    source: "PLAN_RAZVOJA E2 kriterij prihvaćanja"
+    tags: [demo]
+    text: >-
+      Živim sama u Donjem Selu, hodam sa štapom, kćer dolazi samo utorkom, imam kontrolu kod
+      kardiologa.
+    expected:
+      settlement: Donje Selo
+      mobility_class: cane
+      lives_alone: true
+      department: cardiology
+      visit_type: follow_up

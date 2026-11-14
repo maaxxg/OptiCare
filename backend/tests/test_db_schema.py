@@ -1,8 +1,6 @@
 """Opt-in schema tests on real PostGIS: migrations round-trip, indexes, CHECKs, ORM geography."""
 
 import os
-from collections.abc import Generator
-from pathlib import Path
 
 import pytest
 from alembic.config import Config
@@ -18,29 +16,6 @@ pytestmark = pytest.mark.skipif(
     reason="DB tests are opt-in: set RUN_DB_TESTS=1 and start the db service",
 )
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-
-
-def _alembic_config() -> Config:
-    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    return cfg
-
-
-@pytest.fixture
-def migrated() -> Generator[None, None, None]:
-    """Fresh schema at head for one test; always downgraded to base afterwards."""
-    cfg = _alembic_config()
-    command.downgrade(cfg, "base")
-    command.upgrade(cfg, "head")
-    try:
-        yield
-    finally:
-        from app.db import engine
-
-        engine.dispose()
-        command.downgrade(cfg, "base")
-
 
 def _table_names() -> set[str]:
     from app.db import engine
@@ -52,8 +27,8 @@ def _table_names() -> set[str]:
         return set(rows)
 
 
-def test_migration_round_trip() -> None:
-    cfg = _alembic_config()
+def test_migration_round_trip(alembic_cfg: Config) -> None:
+    cfg = alembic_cfg
     command.downgrade(cfg, "base")
     try:
         command.upgrade(cfg, "head")

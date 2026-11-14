@@ -15,7 +15,7 @@ Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je 
 | `scoring_factors.yaml` | faktori bodovanja, težine, pojasevi i razine usluge | E3-T1 (bodovi potrebe za podrškom) |
 | `synthetic_trips.yaml` | parametri raspodjela za generator povijesnih vožnji (`TripLog`); `python -m app.seed` ga uvijek pokreće | E1-T4 (generator sintetičkih vožnji) |
 | `hzzo_rules.yaml` | pravila HZZO-a: sanitetski prijevoz, putni nalog (prag 50 km, iznimke), tko izdaje nalog, izvori | E3-T2 (provjera prava na prijevoz) |
-| `extraction_examples.yaml` | 34 rečenice pacijenata (iz poziva) s očekivanim izdvojenim poljima, uključujući primjere s MBO-om i s podacima koji nedostaju | E2-T4 (točnost izdvajanja po polju, usporedba veličina Qwena) |
+| `extraction_examples.yaml` | 35 rečenica pacijenata (iz poziva) s očekivanim izdvojenim poljima, uključujući primjere s MBO-om i s podacima koji nedostaju | E2-T4 (točnost izdvajanja po polju, usporedba veličina Qwena) |
 
 ## Načela
 
