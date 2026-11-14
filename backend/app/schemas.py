@@ -15,6 +15,7 @@ from pydantic import (
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from app.codebooks import time_of_day_keys
 from app.models import (
     AssignmentStatus,
     Department,
@@ -300,11 +301,8 @@ class SlotRead(SlotBase):
 # ---------------------------------------------------------------------------
 
 
-TIMES_OF_DAY = ("morning", "afternoon")
-
-
 def _validate_time_of_day(value: str | None) -> str | None:
-    if value is not None and value not in TIMES_OF_DAY:
+    if value is not None and value not in time_of_day_keys():
         raise PydanticCustomError(
             "time_of_day", "Željeni dio dana mora biti prijepodne ili poslijepodne."
         )

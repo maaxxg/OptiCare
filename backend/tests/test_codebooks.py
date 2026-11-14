@@ -14,6 +14,7 @@ from app.codebooks import (
     get_urgency_max_shift_days,
     get_visit_duration,
     load_codebooks_from_path,
+    time_of_day_for_hour,
 )
 from app.config import get_settings
 from app.main import read_codebooks
@@ -125,3 +126,66 @@ def test_enums_match_yaml_keys() -> None:
 def test_codebooks_endpoint_from_yaml() -> None:
     res = read_codebooks()
     assert len(res.visit_durations) == 22
+
+
+def test_times_of_day_load_from_yaml() -> None:
+    entries = get_codebooks().times_of_day
+    assert [(e.key, e.label, e.before_hour) for e in entries] == [
+        ("morning", "Prijepodne", 12),
+        ("afternoon", "Poslijepodne", 24),
+    ]
+    assert time_of_day_for_hour(0) == "morning"
+    assert time_of_day_for_hour(11) == "morning"
+    assert time_of_day_for_hour(12) == "afternoon"
+    assert time_of_day_for_hour(23) == "afternoon"
+    assert {e.key: e.label for e in read_codebooks().times_of_day} == {
+        "morning": "Prijepodne",
+        "afternoon": "Poslijepodne",
+    }
+
+
+_TIMES_OF_DAY_BLOCK = (
+    "times_of_day:\n"
+    "  - key: morning\n    label: Prijepodne\n    before_hour: 12\n"
+    "  - key: afternoon\n    label: Poslijepodne\n    before_hour: 24\n"
+)
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        # duplicate key
+        _TIMES_OF_DAY_BLOCK.replace("key: afternoon", "key: morning"),
+        # not strictly increasing
+        _TIMES_OF_DAY_BLOCK.replace("before_hour: 24", "before_hour: 12"),
+        # last entry does not end at 24
+        _TIMES_OF_DAY_BLOCK.replace("before_hour: 24", "before_hour: 18"),
+        # empty
+        "times_of_day: []\n",
+    ],
+)
+def test_invalid_times_of_day_raise(tmp_path: Path, replacement: str) -> None:
+    text = (get_settings().data_dir / CODEBOOKS_RELATIVE_PATH).read_text(encoding="utf-8")
+    assert _TIMES_OF_DAY_BLOCK in text
+    path = tmp_path / "broken.yaml"
+    path.write_text(text.replace(_TIMES_OF_DAY_BLOCK, replacement), encoding="utf-8")
+    with pytest.raises(CodebookError):
+        load_codebooks_from_path(path)
+
+
+def test_broken_codebooks_fail_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from app.main import StartupCheckError, app, lifespan
+
+    def broken() -> None:
+        raise CodebookError("broken")
+
+    monkeypatch.setattr("app.main.get_codebooks", broken)
+
+    async def run() -> None:
+        async with lifespan(app):
+            pass
+
+    with pytest.raises(StartupCheckError, match="Codebooks are invalid"):
+        asyncio.run(run())
