@@ -1,0 +1,92 @@
+# Parametri generatora sintetičkih povijesnih vožnji (E1-T4, KAN-16).
+# Ulaz za treniranje modela trajanja pregleda i vremena ukrcaja (E4).
+# SINTETIČKI NACRT: sve vrijednosti su procjene; domenski član tima (DOM) ih pregledava.
+#
+# Osnovna trajanja pregleda (median_min i p90_min) te osnovno vrijeme ukrcaja (boarding_time_min)
+# čitaju se izravno iz `urgency_and_durations.yaml`, kako bi oba mjesta koristila iste brojeve.
+# Trajanje se uzorkuje iz log-normalne raspodjele određene medijanom i 90. percentilom.
+
+default_count: 3000          # broj povijesnih vožnji (nekoliko tisuća redaka)
+history_days: 180            # raspon u prošlost (dani)
+random_seed: 42
+
+# Udjeli vrsta pregleda u povijesnim vožnjama (zbroj ne mora biti 1; normalizira se u kodu).
+# REVIEW: odražava li omjer tipičnu potražnju (puno dijalize i kontrola, manje prvih pregleda)?
+visit_mix:
+  - {department: dialysis,          visit_type: dialysis_session, weight: 22}
+  - {department: internal_medicine, visit_type: follow_up,        weight: 10}
+  - {department: internal_medicine, visit_type: first_visit,      weight: 5}
+  - {department: internal_medicine, visit_type: procedure_test,   weight: 4}
+  - {department: cardiology,        visit_type: follow_up,        weight: 9}
+  - {department: cardiology,        visit_type: first_visit,      weight: 4}
+  - {department: cardiology,        visit_type: procedure_test,   weight: 5}
+  - {department: ophthalmology,     visit_type: follow_up,        weight: 7}
+  - {department: ophthalmology,     visit_type: first_visit,      weight: 4}
+  - {department: ophthalmology,     visit_type: procedure_test,   weight: 3}
+  - {department: orthopaedics,      visit_type: follow_up,        weight: 6}
+  - {department: orthopaedics,      visit_type: first_visit,      weight: 3}
+  - {department: orthopaedics,      visit_type: procedure_test,   weight: 2}
+  - {department: neurology,         visit_type: follow_up,        weight: 5}
+  - {department: neurology,         visit_type: first_visit,      weight: 3}
+  - {department: neurology,         visit_type: procedure_test,   weight: 3}
+  - {department: radiology,         visit_type: procedure_test,   weight: 8}
+  - {department: oncology,          visit_type: follow_up,        weight: 5}
+  - {department: oncology,          visit_type: first_visit,      weight: 2}
+  - {department: oncology,          visit_type: procedure_test,   weight: 4}
+
+# Udjeli klasa pokretljivosti u povijesnim vožnjama.
+# REVIEW: udjeli po pokretljivosti u Ličko-senjskoj županiji.
+mobility_weights:
+  walks: 0.40
+  cane: 0.30
+  wheelchair: 0.20
+  stretcher: 0.10
+
+# Raspodjela vremena ukrcaja (od dolaska pred vrata do polaska vozila, u minutama).
+# Medijan dolazi iz `urgency_and_durations.yaml -> boarding_time_min` (3, 5, 10, 15 min).
+# REVIEW: 90. percentil i dodatak po katu bez lifta.
+boarding:
+  p90_min:
+    walks: 5
+    cane: 9
+    wheelchair: 16
+    stretcher: 24
+  extra_min_per_floor_no_elevator:
+    walks: 0.5
+    cane: 1.5
+    wheelchair: 3.5
+    stretcher: 5.0
+  companion_factor: 0.90     # pratnja malo skraćuje ukrcaj (0.90 = 10% brže)
+  min_minutes: 1.0
+
+# Dodatni utjecaj dobi na trajanje pregleda u ustanovi.
+# REVIEW: stariji pacijenti u prosjeku trebaju malo više vremena pri prijemu i kretanju kroz odjel.
+visit_duration:
+  age_over_75_factor: 1.08
+  min_minutes: 10.0
+
+# Demografija i zgrade za sintetičke pacijente u povijesnim vožnjama.
+patient_context:
+  age_min: 45
+  age_max: 92
+  age_mode: 74               # trokutasta raspodjela s vrhom oko 74 godine
+  floor_weights:             # 0 = prizemlje/kuća (većina u Lici), 1-4 = katovi u gradu
+    0: 0.68
+    1: 0.14
+    2: 0.10
+    3: 0.06
+    4: 0.02
+  elevator_prob_if_floor_ge_2: 0.25
+  companion_prob_by_mobility:
+    walks: 0.15
+    cane: 0.35
+    wheelchair: 0.65
+    stretcher: 0.80
+
+# Udaljenost u jednom smjeru (km) i prosječna brzina za izračun vremena vožnje.
+drive:
+  mean_speed_kmh: 55.0
+  distance_bands_km:
+    local:     {min: 3.0,  max: 18.0,  weight: 0.35}  # Gospić i okolna naselja
+    regional:  {min: 18.0, max: 65.0,  weight: 0.50}  # Otočac, Perušić, Udbina, Senj, Korenica...
+    external:  {min: 90.0, max: 220.0, weight: 0.15}  # KBC Rijeka / KBC Zagreb (npr. onkologija)
