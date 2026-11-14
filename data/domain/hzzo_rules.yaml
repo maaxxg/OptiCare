@@ -1,0 +1,127 @@
+# Pravila HZZO-a za prijevoz na liječenje (E13-T4). Ulaz za E3-T2 (provjera prava na prijevoz).
+#
+# Sažetak propisa, ne pravni savjet. Stanje prema izvorima na dnu datoteke (pregledano 14. 11. 2026.).
+# Rezultat provjere je uvijek PRIJEDLOG: pravo utvrđuje izabrani liječnik (pravilo 8).
+# Ništa ovdje ne smije ukloniti ili zapostaviti pacijenta (pravilo 1); "none" znači samo da HZZO
+# vjerojatno ne plaća prijevoz, a sustav i dalje traži prijevoz (Crveni križ, općina, zajednička vožnja).
+#
+# Redoslijed provjere: 1) sanitetski prijevoz, 2) putni nalog, 3) ništa.
+
+sanitetski:
+  # Pravilnik o sanitetskom prijevozu (NN 123/09), čl. 2.: pravo ima osigurana osoba koja je
+  # nepokretna, teško pokretna ili "kojoj zbog prirode bolesti nije preporučeno samostalno kretanje".
+  # Dijagnoza ili terapija (dijaliza, kemoterapija) NIJE sama po sebi uvjet; takvi pacijenti
+  # imaju putni nalog bez obzira na udaljenost (vidi travel_order.distance_exceptions).
+  legal_criteria:
+    - nepokretna osoba
+    - teško pokretna osoba
+    - osoba kojoj zbog prirode bolesti nije preporučeno samostalno kretanje
+  # Preslikavanje klase pokretljivosti na prijedlog sustava.
+  by_mobility_class:
+    stretcher: candidate          # nepokretan
+    wheelchair: candidate         # nepokretan ili teško pokretan
+    cane: doctor_judgement        # "teško pokretan" procjenjuje liječnik; sustav ne odlučuje sam
+    walks: not_candidate          # osim ako liječnik ocijeni da mu se ne preporučuje samostalno kretanje
+  # doctor_judgement: sustav računa prijedlog kao da nema prava na sanitet (dakle putni nalog ili
+  # ništa) i označava sestri/liječniku "provjeriti pravo na sanitetski prijevoz".
+  issued_by:                      # Pravilnik NN 123/09, čl. 4.
+    - who: izabrani doktor primarne zdravstvene zaštite
+      when: prijevoz od kuće do ugovorne ustanove (slučaj koji obrađuje naš sustav)
+    - who: doktor u službi hitne medicine
+      when: hitni slučajevi
+    - who: doktor ugovorne zdravstvene ustanove u kojoj se pacijent liječi
+      when: povratak iz ustanove kući i premještaj između ustanova
+    - who: ovlašteni doktor HZZO-a
+      when: prijevoz u inozemstvo i povratak
+
+travel_order:
+  # Zakon o obveznom zdravstvenom osiguranju (ZOZO), čl. 62. i 65., u tekstu na snazi od 1. 8. 2025.
+  # Svi uvjeti moraju vrijediti:
+  conditions:
+    - ne ispunjava uvjete za sanitetski prijevoz
+    - upućen je u drugo mjesto u odnosu na mjesto prebivališta ili boravišta
+    - upućen je najbližem ugovornom subjektu koji pruža tu vrstu zdravstvene zaštite
+    - ugovorni subjekt je udaljen 50 i više km od adrese prebivališta ili boravišta (osim iznimaka)
+  min_distance_km: 50
+  distance:
+    # Od 1. 8. 2025.: najkraća cestovna relacija od ADRESE prebivališta do ADRESE ugovornog
+    # subjekta, prema interaktivnoj karti HAK-a (ZOZO čl. 65. st. 1. i 6.).
+    # Do 31. 7. 2025. računalo se od kolodvora do kolodvora prema daljinomjeru javnog prijevoznika.
+    official_source: interaktivna karta HAK-a
+    # HAK karta nema API: sustav računa cestovnu udaljenost preko adaptera za rute (ORS),
+    # što je približno. Rubne slučajeve označava sestri umjesto da odluči sam.
+    system_source: route_adapter
+    borderline_band_km: [45, 55]  # REVIEW: širina pojasa je procjena
+    on_borderline: flag           # "provjeriti udaljenost na HAK karti"
+    on_unknown: flag              # bez udaljenosti nema prijedloga; nikad se ne nagađa (pravilo 5)
+  nearest_provider:
+    # Pravo vrijedi prema najbližem ugovornom subjektu s tom djelatnošću (ZOZO čl. 62. st. 2.).
+    # U sustavu: najbliža ustanova (Facility) koja ima traženi odjel (department).
+    rule: nearest_facility_with_department
+    # Iznimke koje sustav ne može sam utvrditi, pa ih sestra označava ručno:
+    manual_overrides:
+      - Pacijent je prihvatio udaljeniju ustanovu radi kraće liste čekanja (čl. 62. st. 5.): pravo ostaje.
+      - Bliža ustanova ne može pružiti skrb u primjerenom roku s obzirom na zdravstveno stanje.
+    # Pacijent koji SAM bira udaljeniju ustanovu nema pravo na naknadu ni na sanitet (čl. 62. st. 6.).
+  distance_exceptions:
+    # ZOZO čl. 62. st. 4.: pravo na naknadu neovisno o udaljenosti.
+    - key: under_18
+      label: osigurana osoba do 18. godine života
+      system_check: birth_year
+    - key: radiotherapy_chemotherapy
+      label: radioterapija i kemoterapija
+      # Ne vrijedi za onkologiju općenito: onkološka kontrola nije kemoterapija ni radioterapija.
+      # Odjel (department: oncology) nije dovoljan; treba vrsta pregleda ili ručna oznaka sestre.
+      system_check: manual_flag   # REVIEW: E3-T2 odlučuje: nova visit_type ili polje na zahtjevu
+    - key: hemodialysis
+      label: hemodijaliza kao kronični bubrežni bolesnik
+      system_check: visit_type == dialysis_session
+    - key: work_injury
+      label: priznata ozljeda na radu ili profesionalna bolest
+      system_check: manual_flag
+    - key: organ_donor
+      label: darivatelj organa, tkiva ili stanica
+      system_check: manual_flag
+    - key: art_12
+      label: osigurana osoba iz čl. 12. st. 2. i 3. ZOZO-a
+      system_check: manual_flag
+    - key: treatment_abroad
+      label: upućen na liječenje u inozemstvo
+      system_check: out_of_scope
+  compensation:
+    # ZOZO čl. 65. st. 1.: 0,025 % proračunske osnovice po km najkraće cestovne relacije,
+    # neovisno o prijevoznom sredstvu (autobus, vlak, vlastiti automobil). Mediji 2025. navode ~0,11 €/km.
+    rate: "0,025 % proračunske osnovice po km"
+    approx_eur_per_km: 0.11       # REVIEW: ovisi o proračunskoj osnovici za tekuću godinu
+    round_trip: true              # REVIEW: primjeri u medijima računaju oba smjera; zakon to izričito ne kaže
+  issued_by:
+    # ZOZO čl. 65.: tiskanicu putnog naloga izdaje izabrani doktor medicine primarne zdravstvene
+    # zaštite (ili izabrani doktor dentalne medicine), a ovlašteni radnik HZZO-a kad poziva HZZO.
+    - izabrani doktor primarne zdravstvene zaštite
+  # Do 31. 7. 2025. naknada za hemodijalizu išla je na temelju potvrde ustanove o provedenim
+  # hemodijalizama, bez putnog naloga. REVIEW: novi tekst čl. 65. to više ne spominje.
+
+# Što sustav priprema (E3-T2): prijedlog prava, razlog u jednoj rečenici, udaljenost i njen izvor,
+# primijenjenu iznimku i popis oznaka za sestru. Ne ispisuje stvarnu tiskanicu.
+
+sources:
+  - title: Prijedlog Zakona o izmjenama i dopuni ZOZO-a (PZ 148), na snazi od 1. 8. 2025.
+    url: https://sabor.hr/sites/default/files/uploads/sabor/2025-06-27/154502/PZ_148.pdf
+    note: Sadrži novi tekst čl. 62. st. 1-2 i čl. 65. te dotadašnji tekst čl. 62. st. 4 (iznimke ostaju).
+  - title: Visoki upravni sud, Usoz-264/2023 (31. 3. 2025.)
+    url: https://sudovi.hr/sites/default/files/dokumenti/2025-05/Usoz-264-2023-O-A.pdf
+    note: Prag od 50 km propisan je zakonom; ukinut čl. 62. st. 3-4 Pravilnika (pojam mjesta).
+  - title: Pravilnik o sanitetskom prijevozu (NN 123/09)
+    url: https://www.zakon.hr/cms.htm?id=7708
+  - title: HZZO, letak "Putni trošak" (stanje prije 1. 8. 2025.)
+    url: https://hzzo.hr/wp-content/uploads/2014/01/PUTNI_TROSAK-ISL.pdf
+  - title: Vlada RH, izmjene ZOZO-a (27. 6. 2025.)
+    url: https://vlada.gov.hr/vijesti/promjene-zakona-o-obveznom-zdravstvenom-osiguranju-na-korist-osiguranika/44695
+  - title: JUGinfo, primjena novih pravila (3. 10. 2025.)
+    url: https://juginfo.hr/domovina/2025/10/03/hzzo-novi-zakon-promijenio-naknade-za-troskove-prijevoza-na-lijecenje-nije-sve-tako-crno/
+  - title: Novi list, slučaj 49,83 km prema HAK karti (9. 2. 2026.)
+    url: https://www.novilist.hr/?p=1624652
+
+# Otvoreno (REVIEW):
+# - Pročitan je prijedlog zakona; konačni tekst u Narodnim novinama nije provjeren, kao ni izmjene nakon veljače 2026.
+# - ZOZO sada upućuje na pravilnik iz čl. 19. st. 9.; noviji pravilnik o sanitetskom prijevozu od NN 123/09 nije pronađen.

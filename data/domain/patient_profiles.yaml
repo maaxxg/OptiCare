@@ -3,9 +3,10 @@
 # Naselja i općine su javna geografija Ličko-senjske županije; koordinate postavlja E1-T3.
 #
 # expected_transport_entitlement je OČEKIVANI PRIJEDLOG sustava, ne činjenica; pravo utvrđuje
-# izabrani liječnik (pravilo 8). Heuristika za nacrt: nepokretan ili teško pokretan -> sanitetski;
-# upućen izvan mjesta prebivališta (>= 50 km ili specifični slučajevi) -> putni nalog; inače ništa.
-# REVIEW: potvrditi heuristiku s osobom iz prakse (E13-T4 [S] će opisati pravila HZZO-a).
+# izabrani liječnik (pravilo 8). Pravila su u hzzo_rules.yaml (E13-T4): kolica ili nosila -> sanitetski;
+# štap -> liječnik procjenjuje sanitet; inače putni nalog ako je najbliža ustanova s tom djelatnošću
+# 50 i više km cestom od adrese (ili iznimka: hemodijaliza, kemoterapija, radioterapija, do 18 god.);
+# inače ništa. Udaljenosti u komentarima su približne (OSRM, najbrža ruta), ne HAK karta.
 #
 # earliest_offset_days / latest_offset_days: dani od datuma demo plana (0 = plan dana, 1 = "sutra").
 # Raspon ne smije biti veći od max_shift_days klase hitnosti.
@@ -32,7 +33,7 @@ patients:
     companion: true
     floor: 1
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: none   # štap: pravo na sanitet procjenjuje liječnik; Udbina–OB Gospić ~49 km cestom, rubni slučaj (provjeriti na HAK karti)
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -128,7 +129,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: sanitetski   # REVIEW: dijaliza je više puta tjedno; pokretan je uz štap, je li to dovoljno za sanitetski? Odlučuje liječnik.
+    expected_transport_entitlement: travel_order   # hemodijaliza: putni nalog bez obzira na udaljenost; REVIEW: štap, pravo na sanitet procjenjuje liječnik
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -192,7 +193,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: none   # Donji Kosinj–OB Gospić ~36 km cestom, ispod praga od 50 km
     social_order_today: true
     own_car: false
     carpool_driver_seats: 0
@@ -224,7 +225,7 @@ patients:
     companion: true
     floor: 0
     elevator: false
-    expected_transport_entitlement: none
+    expected_transport_entitlement: none   # REVIEW: vozi se sam; najbliža kardiologija je OB Gospić (~57 km). Putni nalog samo ako je u Rijeku upućen jer Gospić ne može
     social_order_today: false
     own_car: true
     carpool_driver_seats: 2
@@ -256,7 +257,7 @@ patients:
     companion: false
     floor: 1
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: travel_order   # Senj–KBC Rijeka ~67 km; onkološka kontrola nije kemoterapija, pa vrijedi prag od 50 km
     social_order_today: true
     own_car: false
     carpool_driver_seats: 0
@@ -320,7 +321,7 @@ patients:
     companion: true
     floor: 1
     elevator: true
-    expected_transport_entitlement: travel_order   # REVIEW: štap i duga relacija Novalja–Zagreb; putni nalog ili sanitetski?
+    expected_transport_entitlement: travel_order   # REVIEW: najbliža neurologija je OB Gospić (~67 km), ne Zagreb; štap: pravo na sanitet procjenjuje liječnik
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -448,7 +449,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: travel_order   # Vrhovine–OB Gospić ~50 km cestom, rubni slučaj (provjeriti na HAK karti)
     social_order_today: true
     own_car: false
     carpool_driver_seats: 0
@@ -480,7 +481,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: none
+    expected_transport_entitlement: none   # Udbina–OB Gospić ~49 km cestom, rubni slučaj (provjeriti na HAK karti)
     social_order_today: false
     own_car: true
     carpool_driver_seats: 2
@@ -512,7 +513,7 @@ patients:
     companion: true
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: travel_order   # Kuterevo–KBC Rijeka > 100 km
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
@@ -544,7 +545,7 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: none   # Lovinac–OB Gospić ~42 km cestom, ispod praga od 50 km
     social_order_today: true
     own_car: false
     carpool_driver_seats: 0
@@ -576,7 +577,7 @@ patients:
     companion: false
     floor: 3
     elevator: false
-    expected_transport_entitlement: none   # REVIEW: ide unutar mjesta prebivališta, ali sama ne može niz stepenice; sanitetski?
+    expected_transport_entitlement: none   # REVIEW: unutar mjesta prebivališta; štap i stepenice: pravo na sanitet procjenjuje liječnik
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
