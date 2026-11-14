@@ -24,6 +24,13 @@ from app.codebooks import (
 )
 from app.config import get_settings
 from app.db import get_db
+from app.entitlement import (
+    HZZORulesError,
+    get_hzzo_rules,
+)
+from app.entitlement import (
+    router as entitlement_router,
+)
 from app.intake import extract_intake, get_intake_llm_client
 from app.models import (
     Facility,
@@ -105,6 +112,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         get_codebooks()
     except CodebookError as exc:
         raise StartupCheckError(f"Codebooks are invalid: {exc}") from exc
+    try:
+        get_hzzo_rules()
+    except HZZORulesError as exc:
+        raise StartupCheckError(f"HZZO rules are invalid: {exc}") from exc
     check_routing_config()
     if get_settings().check_db_on_startup:
         from app.db import engine
@@ -126,6 +137,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="OptiCare", lifespan=lifespan)
 app.include_router(plan_router)
+app.include_router(entitlement_router)
 
 
 @app.get("/health")
