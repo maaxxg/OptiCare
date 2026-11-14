@@ -83,7 +83,7 @@
 <div class="page">
 	<div class="page-header">
 		<div class="logo-dot"></div>
-		<button class="back-link" onclick={goBack}> Povratak ← </button>
+		<button class="back-link" onclick={goBack}>← Povratak</button>
 	</div>
 
 	<h1 class="page-title">Ispunite pacijentove podatke</h1>
@@ -117,7 +117,7 @@
 				</div>
 
 				<div class="radio-box-row">
-					<span class="radio-box-label">Prijevoz</span>
+					<span class="radio-box-label">Treba prijevoz</span>
 					<div class="radio-cols-options">
 						<label class="radio-cell">
 							<input
@@ -141,7 +141,7 @@
 				</div>
 
 				<div class="radio-box-row">
-					<span class="radio-box-label">Voljan voziti drugu osobu</span>
+					<span class="radio-box-label">Nudi prijevoz drugima</span>
 					<div class="radio-cols-options">
 						<label class="radio-cell">
 							<input
@@ -175,7 +175,7 @@
 			<p class="error-text">{error}</p>
 		{/if}
 
-		<button type="submit" class="btn-primary">Predaj</button>
+		<button type="submit" class="btn-primary">Spremi</button>
 	</form>
 </div>
 

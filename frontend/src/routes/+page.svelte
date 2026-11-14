@@ -15,7 +15,7 @@
 	<p class="page-subtitle">Planiranje termina i prijevoza za pacijente</p>
 
 	<div class="dashboard-actions">
-		<a href={resolve('/unos')} class="action-card">Unos informacija pacijenta</a>
+		<a href={resolve('/unos')} class="action-card">Unos podataka o pacijentu</a>
 		<a href={resolve('/raspored')} class="action-card">Raspored</a>
 	</div>
 </div>

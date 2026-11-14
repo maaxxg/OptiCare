@@ -28,7 +28,7 @@
 <div class="page-wide">
 	<div class="schedule-top-nav">
 		<div class="logo-dot"></div>
-		<button class="back-link" onclick={() => goto(resolve('/'))}>Povratak ←</button>
+		<button class="back-link" onclick={() => goto(resolve('/'))}>← Povratak</button>
 	</div>
 
 	<div class="schedule-header-row">
@@ -48,7 +48,8 @@
 		<p class="empty-state">Još nema unesenih zahtjeva.</p>
 	{:else}
 		<p class="page-subtitle">
-			Termini i prijevoz još nisu planirani. Vremena će se prikazati nakon što sestra potvrdi plan.
+			Termini i prijevoz još nisu planirani. Vremena će biti prikazana nakon što medicinska sestra
+			potvrdi plan.
 		</p>
 
 		<div class="schedule-table-wrap">
