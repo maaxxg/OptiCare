@@ -23,10 +23,7 @@
 		try {
 			route = await getDriverRoute(token);
 		} catch (err) {
-			error =
-				err instanceof Error
-					? err.message
-					: 'Nije moguće učitati rutu za navedeni token.';
+			error = err instanceof Error ? err.message : 'Nije moguće učitati rutu za navedeni token.';
 		} finally {
 			loading = false;
 		}
