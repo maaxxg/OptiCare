@@ -5,20 +5,24 @@
 # expected_transport_entitlement je OČEKIVANI PRIJEDLOG sustava, ne činjenica; pravo utvrđuje
 # izabrani liječnik (pravilo 8). Heuristika za nacrt: nepokretan ili teško pokretan -> sanitetski;
 # upućen izvan mjesta prebivališta (>= 50 km ili specifični slučajevi) -> putni nalog; inače ništa.
+# REVIEW: potvrditi heuristiku s osobom iz prakse (E13-T4 [S] će opisati pravila HZZO-a).
 #
 # earliest_offset_days / latest_offset_days: dani od datuma demo plana (0 = plan dana, 1 = "sutra").
 # Raspon ne smije biti veći od max_shift_days klase hitnosti.
 # social_order_today: pokretan pacijent koji bi DANAS vjerojatno dobio nalog za sanitetski prijevoz
 #   iz socijalnih razloga (plan, E1-T3); sustav ga ne šalje na sanitetsko vozilo (pravilo 7).
-# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb.
+# Destinacije: ob_gospic, kbc_rijeka, kbc_zagreb (REVIEW: konkretna zagrebačka bolnica je nagađanje).
+# OB Gospić nema onkologiju; onkološki pregledi idu u KBC (kbc_rijeka, kbc_zagreb).
+# carpool_consent: pacijent pristaje na zajedničku vožnju (kao suputnik, ili kao vozač ako ima auto).
+# driver_documents_confirmed: sestra je provjerila vozačku, registraciju i osiguranje pacijenta-vozača.
 
 patients:
   - key: p01
     first_name: Marija
     last_name: Marijević
     birth_year: 1951
-    mbo: "096869695"
-    phone: "+385 98 537 775"
+    mbo: "000000001"
+    phone: "+385 00 000 0001"
     phone_type: landline
     settlement: Udbina
     municipality: Udbina
@@ -33,12 +37,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 4
-    consent_given: true
     visit:
       destination: ob_gospic
       department: ophthalmology
@@ -53,8 +53,8 @@ patients:
     first_name: Ivan
     last_name: Kovačević
     birth_year: 1958
-    mbo: "102938475"
-    phone: "+385 91 224 8810"
+    mbo: "000000002"
+    phone: "+385 00 000 0002"
     phone_type: basic_mobile
     settlement: Otočac
     municipality: Otočac
@@ -69,12 +69,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: orthopaedics
@@ -89,8 +85,8 @@ patients:
     first_name: Ana
     last_name: Babić
     birth_year: 1936
-    mbo: "293847561"
-    phone: "+385 53 771 204"
+    mbo: "000000003"
+    phone: "+385 00 000 0003"
     phone_type: landline
     settlement: Senj
     municipality: Senj
@@ -105,12 +101,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: radiology
@@ -125,8 +117,8 @@ patients:
     first_name: Josip
     last_name: Marić
     birth_year: 1962
-    mbo: "384756192"
-    phone: "+385 92 311 4509"
+    mbo: "000000004"
+    phone: "+385 00 000 0004"
     phone_type: basic_mobile
     settlement: Korenica
     municipality: Plitvička Jezera
@@ -136,17 +128,13 @@ patients:
     companion: false
     floor: 0
     elevator: false
-    expected_transport_entitlement: sanitetski
+    expected_transport_entitlement: sanitetski   # REVIEW: dijaliza je više puta tjedno; pokretan je uz štap, je li to dovoljno za sanitetski? Odlučuje liječnik.
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: dialysis
@@ -161,8 +149,8 @@ patients:
     first_name: Stjepan
     last_name: Perković
     birth_year: 1955
-    mbo: "475869102"
-    phone: "+385 98 441 920"
+    mbo: "000000005"
+    phone: "+385 00 000 0005"
     phone_type: smartphone
     settlement: Perušić
     municipality: Perušić
@@ -177,12 +165,8 @@ patients:
     own_car: true
     carpool_driver_seats: 3
     carpool_consent: true
-    driver_registration_valid: true
-    driver_insurance_valid: true
-    driver_license_valid: true
-    volunteer_partner: "Crveni križ Gospić"
+    driver_documents_confirmed: true
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: ophthalmology
@@ -197,10 +181,10 @@ patients:
     first_name: Katica
     last_name: Starčević
     birth_year: 1949
-    mbo: "586970213"
-    phone: "+385 91 605 3321"
+    mbo: "000000006"
+    phone: "+385 00 000 0006"
     phone_type: basic_mobile
-    settlement: Kosinj
+    settlement: Donji Kosinj
     municipality: Perušić
     county: Ličko-senjska
     mobility_class: walks
@@ -213,12 +197,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 2
-    consent_given: true
     visit:
       destination: ob_gospic
       department: internal_medicine
@@ -233,8 +213,8 @@ patients:
     first_name: Ante
     last_name: Rukavina
     birth_year: 1953
-    mbo: "697081324"
-    phone: "+385 99 712 4401"
+    mbo: "000000007"
+    phone: "+385 00 000 0007"
     phone_type: smartphone
     settlement: Otočac
     municipality: Otočac
@@ -249,12 +229,8 @@ patients:
     own_car: true
     carpool_driver_seats: 2
     carpool_consent: true
-    driver_registration_valid: true
-    driver_insurance_valid: true
-    driver_license_valid: true
-    volunteer_partner: "Crveni križ Gospić"
+    driver_documents_confirmed: true
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: kbc_rijeka
       department: cardiology
@@ -269,8 +245,8 @@ patients:
     first_name: Jelena
     last_name: Žugaj
     birth_year: 1952
-    mbo: "708192435"
-    phone: "+385 95 883 1102"
+    mbo: "000000008"
+    phone: "+385 00 000 0008"
     phone_type: basic_mobile
     settlement: Senj
     municipality: Senj
@@ -285,12 +261,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 1
-    consent_given: true
     visit:
       destination: kbc_rijeka
       department: oncology
@@ -305,8 +277,8 @@ patients:
     first_name: Mirko
     last_name: Devčić
     birth_year: 1947
-    mbo: "819203546"
-    phone: "+385 53 562 918"
+    mbo: "000000009"
+    phone: "+385 00 000 0009"
     phone_type: landline
     settlement: Smiljan
     municipality: Gospić
@@ -321,12 +293,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 1
-    consent_given: true
     visit:
       destination: ob_gospic
       department: cardiology
@@ -341,8 +309,8 @@ patients:
     first_name: Nikola
     last_name: Vukelić
     birth_year: 1950
-    mbo: "920314657"
-    phone: "+385 91 510 7782"
+    mbo: "000000010"
+    phone: "+385 00 000 0010"
     phone_type: basic_mobile
     settlement: Novalja
     municipality: Novalja
@@ -352,17 +320,13 @@ patients:
     companion: true
     floor: 1
     elevator: true
-    expected_transport_entitlement: travel_order
+    expected_transport_entitlement: travel_order   # REVIEW: štap i duga relacija Novalja–Zagreb; putni nalog ili sanitetski?
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: kbc_zagreb
       department: neurology
@@ -377,8 +341,8 @@ patients:
     first_name: Dragica
     last_name: Pavlić
     birth_year: 1944
-    mbo: "135792468"
-    phone: "+385 53 688 112"
+    mbo: "000000011"
+    phone: "+385 00 000 0011"
     phone_type: landline
     settlement: Donji Lapac
     municipality: Donji Lapac
@@ -393,12 +357,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 2
-    consent_given: true
     visit:
       destination: ob_gospic
       department: internal_medicine
@@ -413,8 +373,8 @@ patients:
     first_name: Mate
     last_name: Bogdan
     birth_year: 1969
-    mbo: "246813579"
-    phone: "+385 98 901 2345"
+    mbo: "000000012"
+    phone: "+385 00 000 0012"
     phone_type: smartphone
     settlement: Brinje
     municipality: Brinje
@@ -429,12 +389,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: radiology
@@ -449,8 +405,8 @@ patients:
     first_name: Ljubica
     last_name: Tomljenović
     birth_year: 1938
-    mbo: "369258147"
-    phone: "+385 53 694 033"
+    mbo: "000000013"
+    phone: "+385 00 000 0013"
     phone_type: landline
     settlement: Karlobag
     municipality: Karlobag
@@ -465,12 +421,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: orthopaedics
@@ -485,8 +437,8 @@ patients:
     first_name: Zdravko
     last_name: Mesić
     birth_year: 1951
-    mbo: "741852963"
-    phone: "+385 53 775 190"
+    mbo: "000000014"
+    phone: "+385 00 000 0014"
     phone_type: landline
     settlement: Vrhovine
     municipality: Vrhovine
@@ -501,12 +453,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 1
-    consent_given: true
     visit:
       destination: ob_gospic
       department: neurology
@@ -521,8 +469,8 @@ patients:
     first_name: Damir
     last_name: Blažević
     birth_year: 1960
-    mbo: "852963741"
-    phone: "+385 99 340 1188"
+    mbo: "000000015"
+    phone: "+385 00 000 0015"
     phone_type: smartphone
     settlement: Udbina
     municipality: Udbina
@@ -537,12 +485,8 @@ patients:
     own_car: true
     carpool_driver_seats: 2
     carpool_consent: true
-    driver_registration_valid: true
-    driver_insurance_valid: true
-    driver_license_valid: true
-    volunteer_partner: "Crveni križ Gospić"
+    driver_documents_confirmed: true
     missed_visits_last_year: 0
-    consent_given: true
     visit:
       destination: ob_gospic
       department: cardiology
@@ -557,8 +501,8 @@ patients:
     first_name: Petar
     last_name: Ivezić
     birth_year: 1973
-    mbo: "963852741"
-    phone: "+385 98 715 6604"
+    mbo: "000000016"
+    phone: "+385 00 000 0016"
     phone_type: smartphone
     settlement: Kuterevo
     municipality: Otočac
@@ -573,28 +517,24 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 0
-    consent_given: true
     visit:
-      destination: ob_gospic
+      destination: kbc_rijeka
       department: oncology
       visit_type: procedure_test
       urgency_class: within_few_days
       earliest_offset_days: 1
       latest_offset_days: 3
       recurrence: null
-    story: "Iz Kutereva sam i moram u roku od par dana na onkološku obradu u Gospić. Pokretan sam i supruga ide sa mnom, ali nemamo automobil."
+    story: "Iz Kutereva sam i moram u roku od par dana na onkološku obradu u Rijeku. Pokretan sam i supruga ide sa mnom, ali nemamo automobil."
 
   - key: p17
     first_name: Danica
     last_name: Šarić
     birth_year: 1942
-    mbo: "159487263"
-    phone: "+385 91 490 8821"
+    mbo: "000000017"
+    phone: "+385 00 000 0017"
     phone_type: basic_mobile
     settlement: Lovinac
     municipality: Lovinac
@@ -609,12 +549,8 @@ patients:
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: true
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 2
-    consent_given: true
     visit:
       destination: ob_gospic
       department: ophthalmology
@@ -629,8 +565,8 @@ patients:
     first_name: Milka
     last_name: Rončević
     birth_year: 1940
-    mbo: "753951486"
-    phone: "+385 53 572 809"
+    mbo: "000000018"
+    phone: "+385 00 000 0018"
     phone_type: landline
     settlement: Gospić
     municipality: Gospić
@@ -640,17 +576,13 @@ patients:
     companion: false
     floor: 3
     elevator: false
-    expected_transport_entitlement: none
+    expected_transport_entitlement: none   # REVIEW: ide unutar mjesta prebivališta, ali sama ne može niz stepenice; sanitetski?
     social_order_today: false
     own_car: false
     carpool_driver_seats: 0
     carpool_consent: false
-    driver_registration_valid: false
-    driver_insurance_valid: false
-    driver_license_valid: false
-    volunteer_partner: null
+    driver_documents_confirmed: false
     missed_visits_last_year: 3
-    consent_given: true
     visit:
       destination: ob_gospic
       department: neurology
