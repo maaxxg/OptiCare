@@ -136,11 +136,13 @@ class ScoringConfig(BaseModel):
 
     factors: list[FactorConfig]
     levels: list[LevelConfig]
+    min_level_by_mobility: dict[MobilityClass, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _check_config(self) -> ScoringConfig:
         self._check_factors()
         self._check_levels()
+        self._check_mobility_floors()
         return self
 
     def _check_factors(self) -> None:
@@ -165,6 +167,14 @@ class ScoringConfig(BaseModel):
                 raise ValueError(f"factor '{f.key}' must be a boolean factor")
             if f.key in _BAND_FACTORS and f.bands is None:
                 raise ValueError(f"factor '{f.key}' must be a band factor")
+
+    def _check_mobility_floors(self) -> None:
+        level_keys = {lv.key for lv in self.levels}
+        for mobility, level_key in self.min_level_by_mobility.items():
+            if level_key not in level_keys:
+                raise ValueError(
+                    f"min_level_by_mobility '{mobility.value}': unknown level '{level_key}'"
+                )
 
     def _check_levels(self) -> None:
         if not self.levels:
@@ -256,6 +266,12 @@ class ScoringResult(BaseModel):
     level_key: str
     level_label: str
     adds_help: list[str] = Field(default_factory=list)
+    level_raised_by_mobility: bool = Field(
+        default=False,
+        description=(
+            "Razina je podignuta na najnižu razinu za klasu pokretljivosti (min_level_by_mobility)"
+        ),
+    )
     factors: list[FactorContribution]
 
 
@@ -322,6 +338,31 @@ def _determine_level(config: ScoringConfig, score: float) -> LevelConfig:
     raise ScoringConfigError(f"No scoring level covers score {score}")
 
 
+def _mobility_floor(cfg: ScoringConfig, mobility_class: Any) -> LevelConfig | None:
+    """Vrati najnižu razinu za klasu pokretljivosti, ili None ako nema granice.
+
+    Nepoznata ili nedostajuća klasa dobiva najvišu konfiguriranu granicu (mogla
+    bi biti i nosila), pa razina nikad nije niža nego za bilo koju stvarnu klasu.
+    """
+    floors = cfg.min_level_by_mobility
+    if not floors:
+        return None
+    known: MobilityClass | None = None
+    if isinstance(mobility_class, str):
+        try:
+            known = MobilityClass(mobility_class.lower())
+        except ValueError:
+            known = None
+    if known is not None:
+        floor_key = floors.get(known)
+        if floor_key is None:
+            return None
+    else:
+        ranks = {lv.key: i for i, lv in enumerate(cfg.levels)}
+        floor_key = max(floors.values(), key=lambda k: ranks[k])
+    return next(lv for lv in cfg.levels if lv.key == floor_key)
+
+
 def _patient_age(birth_year: int | None, reference_date: date | None = None) -> int | None:
     """Vrati dob pacijenta, ili None ako birth_year nedostaje ili je u budućnosti.
 
@@ -358,7 +399,9 @@ def compute_score(
     pogađa se: faktor je označen ``missing`` i doprinosi 0 u ``total_score``,
     a razina se bira prema ``total_score_upper`` (poznati bodovi plus najveći
     mogući doprinos faktora koji nedostaju), pa nedostajući podatak nikad ne
-    snižava razinu pomoći.
+    snižava razinu pomoći. Razina nikad nije niža od ``min_level_by_mobility``
+    za klasu pokretljivosti (granica samo podiže razinu, nikad je ne snižava);
+    nepoznata klasa dobiva najvišu konfiguriranu granicu.
     """
     cfg = config or get_scoring_config()
     ref = reference_date or datetime.now(ZAGREB).date()
@@ -407,7 +450,13 @@ def compute_score(
     # Težine se validiraju na zbroj 1; min() štiti samo od float šuma.
     total = round(min(total, 1.0), 4)
     upper = round(min(total + upper_extra, 1.0), 4)
-    level = _determine_level(cfg, upper)
+    score_level = _determine_level(cfg, upper)
+    floor = _mobility_floor(cfg, mobility_class)
+    level = score_level
+    raised = False
+    if floor is not None and cfg.levels.index(floor) > cfg.levels.index(score_level):
+        level = floor
+        raised = True
 
     return ScoringResult(
         patient_id=patient_id,
@@ -417,6 +466,7 @@ def compute_score(
         level_key=level.key,
         level_label=level.label,
         adds_help=level.adds_help,
+        level_raised_by_mobility=raised,
         factors=contributions,
     )
 

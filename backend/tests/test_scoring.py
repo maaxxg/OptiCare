@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.db import get_db
 from app.main import app
+from app.models import MobilityClass
 from app.scoring import (
     ScoringConfig,
     ScoringConfigError,
@@ -62,6 +63,10 @@ def test_load_scoring_config_parses_all_factors(config: ScoringConfig) -> None:
 def test_load_scoring_config_weights_sum_to_one(config: ScoringConfig) -> None:
     total = sum(f.weight for f in config.factors)
     assert abs(total - 1.0) < 0.01, f"Težine se zbrajaju u {total}, a očekuje se ~1.0"
+
+
+def test_load_scoring_config_has_stretcher_floor(config: ScoringConfig) -> None:
+    assert config.min_level_by_mobility == {MobilityClass.STRETCHER: "high"}
 
 
 def test_load_scoring_config_has_three_levels(config: ScoringConfig) -> None:
@@ -390,9 +395,24 @@ def _last_level_too_low(d: dict) -> None:
     d["levels"][-1]["max_score"] = 1.0
 
 
+def _floor_unknown_level(d: dict) -> None:
+    d["min_level_by_mobility"] = {"stretcher": "very_high"}
+
+
+def _floor_unknown_mobility(d: dict) -> None:
+    d["min_level_by_mobility"] = {"skateboard": "high"}
+
+
+def _floor_key_typo(d: dict) -> None:
+    d["min_level_by_mobilty"] = d.pop("min_level_by_mobility")
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
+        _floor_unknown_level,
+        _floor_unknown_mobility,
+        _floor_key_typo,
         _bands_and_mapping,
         _only_if_true,
         _empty_bands,
@@ -625,3 +645,92 @@ def test_road_distance_is_unknown_for_malformed_matrix(distances: Any) -> None:
 
     facility = SimpleNamespace(latitude=45.81, longitude=15.98)
     assert road_distance_km(_fake_patient(44.55, 15.37), facility, _Malformed()) is None  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Najniža razina po klasi pokretljivosti
+# ---------------------------------------------------------------------------
+
+_LOW_NEED: dict[str, Any] = {
+    "mobility_class": "stretcher",
+    "distance_km": 5.0,
+    "birth_year": 2000,
+    "lives_alone": False,
+    "missed_visits_last_year": 0,
+    "phone_type": "smartphone",
+    "companion_available": True,
+}
+
+
+def _config_with_floor(floor: dict[str, str] | None) -> ScoringConfig:
+    data = yaml.safe_load(SCORING_YAML.read_text(encoding="utf-8"))
+    if floor is None:
+        del data["min_level_by_mobility"]
+    else:
+        data["min_level_by_mobility"] = floor
+    return ScoringConfig.model_validate(data)
+
+
+def test_stretcher_with_low_score_is_raised_to_high(config: ScoringConfig) -> None:
+    result = _score(config, **_LOW_NEED)
+    high = next(lv for lv in config.levels if lv.key == "high")
+    assert result.total_score_upper < 0.60
+    assert result.level_key == "high"
+    assert result.level_raised_by_mobility is True
+    assert result.adds_help == high.adds_help
+
+
+def test_floor_never_lowers_level() -> None:
+    cfg = _config_with_floor({"walks": "low", "stretcher": "low"})
+    result = _score(
+        cfg,
+        **{
+            **_LOW_NEED,
+            "distance_km": 200.0,
+            "birth_year": 1930,
+            "lives_alone": True,
+            "phone_type": "landline",
+            "companion_available": False,
+            "missed_visits_last_year": 5,
+        },
+    )
+    assert result.level_key == "high"
+    assert result.level_raised_by_mobility is False
+
+
+def test_max_need_stretcher_is_high_without_raise(config: ScoringConfig) -> None:
+    result = _score(
+        config,
+        **{
+            **_LOW_NEED,
+            "distance_km": 200.0,
+            "birth_year": 1930,
+            "lives_alone": True,
+            "phone_type": "landline",
+            "companion_available": False,
+            "missed_visits_last_year": 5,
+        },
+    )
+    assert result.level_key == "high"
+    assert result.level_raised_by_mobility is False
+
+
+def test_config_without_floor_uses_score_level() -> None:
+    cfg = _config_with_floor(None)
+    assert cfg.min_level_by_mobility == {}
+    result = _score(cfg, **_LOW_NEED)
+    assert result.level_key == "low"
+    assert result.level_raised_by_mobility is False
+    assert _score(cfg, **{**_LOW_NEED, "mobility_class": "jetpack"}).level_key == "low"
+
+
+def test_unknown_mobility_gets_highest_floor(config: ScoringConfig) -> None:
+    result = _score(config, **{**_LOW_NEED, "mobility_class": "jetpack"})
+    assert result.level_key == "high"
+    assert "mobility_class" in result.missing_factors
+
+
+def test_non_stretcher_has_no_floor(config: ScoringConfig) -> None:
+    result = _score(config, **{**_LOW_NEED, "mobility_class": "walks"})
+    assert result.level_key == "low"
+    assert result.level_raised_by_mobility is False
