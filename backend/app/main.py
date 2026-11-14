@@ -32,6 +32,7 @@ from app.models import (
     VisitRequest,
     make_point_wkt,
 )
+from app.plan_api import router as plan_router
 from app.schemas import (
     FacilityRead,
     GeocodeRequest,
@@ -124,6 +125,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="OptiCare", lifespan=lifespan)
+app.include_router(plan_router)
 
 
 @app.get("/health")
