@@ -1,7 +1,8 @@
 """Demo seed data for Ličko-senjska županija (E1-T3).
 
 Run: `uv run python -m app.seed` (backend dir) or `docker compose exec backend python -m app.seed`.
-Deletes all rows in the domain tables and inserts the demo data again, so it can be re-run.
+Deletes all rows in the domain tables and inserts the demo data again (including the synthetic
+TripLog history from `app.synthetic_trips`), so it can be re-run.
 All people are synthetic (rule 4). Geography is public: municipality boundaries, settlement and
 hospital coordinates come from OpenStreetMap (see data/geo/README.md).
 """
@@ -46,6 +47,7 @@ from app.models import (
     make_point_wkt,
     visit_request_candidate_slots,
 )
+from app.synthetic_trips import generate_synthetic_trip_logs
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +313,7 @@ class SeedBundle:
     patients: list[Patient]
     visit_requests: list[VisitRequest]
     vehicles: list[Vehicle]
+    trip_logs: list[TripLog]
 
 
 def _build_slots(facilities: dict[str, Facility], base_date: date) -> list[Slot]:
@@ -507,6 +510,7 @@ def build_seed_objects(base_date: date | None = None, data_dir: Path | None = No
         patients=patients,
         visit_requests=visit_requests,
         vehicles=_build_vehicles(patients),
+        trip_logs=generate_synthetic_trip_logs(end_date=plan_date, data_dir=root),
     )
 
 
@@ -533,6 +537,7 @@ def seed_database(
     session.add_all(bundle.patients)
     session.add_all(bundle.visit_requests)
     session.add_all(bundle.vehicles)
+    session.add_all(bundle.trip_logs)
     session.commit()
 
     return {
@@ -542,6 +547,7 @@ def seed_database(
         "patients": len(bundle.patients),
         "visit_requests": len(bundle.visit_requests),
         "vehicles": len(bundle.vehicles),
+        "trip_logs": len(bundle.trip_logs),
     }
 
 
