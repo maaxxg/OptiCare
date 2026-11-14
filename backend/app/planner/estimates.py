@@ -1,21 +1,30 @@
 """The single seam through which the planner gets visit duration and boarding time.
 
-Today the body is the rule (YAML codebooks). When E4-T1/T2 land, these functions call the
-Predictor registry (`visit_duration`, `service_time`) with the codebook as the rule fallback
-(rule 12), and the planner does not change. A missing codebook entry raises `CodebookError`;
-nothing is guessed.
+Calls the Predictor registry (`visit_duration`, `service_time`) with the YAML codebook as the
+rule fallback (rule 12), so switching a slot to a trained model requires no planner changes.
+A missing codebook entry raises `CodebookError` (via `PredictorInputError`); nothing is guessed.
 """
 
-from app.codebooks import get_boarding_time_min, get_visit_duration
 from app.models import Department, MobilityClass, VisitType
 from app.plan_schemas import Estimate, EstimateSource
+from app.predictors import get_predictor
 
 
 def visit_duration(department: Department | str, visit_type: VisitType | str) -> Estimate:
     """Visit duration at p90 (used for the return window)."""
-    entry = get_visit_duration(department, visit_type)
-    return Estimate(minutes=entry.p90_min, source=EstimateSource.RULES, version="codebook")
+    dept = department.value if isinstance(department, Department) else str(department)
+    vtype = visit_type.value if isinstance(visit_type, VisitType) else str(visit_type)
+    predictor = get_predictor("visit_duration")
+    pred = predictor.predict({"department": dept, "visit_type": vtype})
+    minutes = round(pred.high if pred.high is not None else pred.value)
+    return Estimate(
+        minutes=minutes,
+        source=EstimateSource(pred.source),
+        version=predictor.version,
+    )
 
 
 def boarding_minutes(mobility_class: MobilityClass | str) -> int:
-    return get_boarding_time_min(mobility_class)
+    mob = mobility_class.value if isinstance(mobility_class, MobilityClass) else str(mobility_class)
+    pred = get_predictor("service_time").predict({"mobility_class": mob})
+    return round(pred.value)
