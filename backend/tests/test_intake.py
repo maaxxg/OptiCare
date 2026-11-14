@@ -212,19 +212,44 @@ def test_uncued_number_sets_mbo_stripped_but_not_mbo() -> None:
     assert "mbo" in result.for_review
 
 
-def test_all_extraction_examples_mbo_from_cue_and_never_sent_to_llm() -> None:
+def _load_examples() -> list[dict[str, Any]]:
     path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
-    examples = yaml.safe_load(path.read_text(encoding="utf-8"))["examples"]
-    assert len(examples) >= 35
-    for ex in examples:
-        expected = ex.get("mbo_in_text")
-        sanitized, mbo, _ = strip_mbo_from_text(str(ex["text"]))
-        assert mbo == expected, ex.get("id")
-        if expected:
-            spaced = " ".join([expected[:3], expected[3:6], expected[6:]])
-            assert expected not in sanitized
-            assert spaced not in sanitized
-            assert "nula nula nula nula nula nula" not in sanitized.lower()
+    return list(yaml.safe_load(path.read_text(encoding="utf-8"))["examples"])
+
+
+EXAMPLES = _load_examples()
+EXAMPLE_IDS = [str(ex["id"]) for ex in EXAMPLES]
+assert len(EXAMPLES) >= 30, "extraction_examples.yaml is empty or truncated"
+assert len(set(EXAMPLE_IDS)) == len(EXAMPLE_IDS), "duplicate example ids"
+assert any(ex.get("mbo_in_text") for ex in EXAMPLES), "no example with an MBO"
+assert any(not ex.get("mbo_in_text") for ex in EXAMPLES), "no example without an MBO"
+
+
+@pytest.mark.parametrize("example", EXAMPLES, ids=EXAMPLE_IDS)
+def test_examples_mbo_never_reaches_llm(example: dict[str, Any]) -> None:
+    """E11-T1: no form of the MBO is in the request sent to the LLM, for every yaml example."""
+    spy = SpyLLMClient(delegate=MockLLMClient(response="{}"))
+    result = extract_intake(
+        text=str(example["text"]),
+        llm_client=spy,
+        geocoding_client=MockGeocodingClient(),
+    )
+    system, user = spy.calls[0]
+    mbo = example.get("mbo_in_text")
+    if mbo:
+        mbo = str(mbo)
+        spaced = f"{mbo[:3]} {mbo[3:6]} {mbo[6:]}"
+        for sent in (system, user):
+            assert mbo not in sent
+            assert spaced not in sent
+        assert "nula nula" not in user.lower()
+        assert "[MBO_REDACTED]" in user
+        assert result.mbo_stripped is True
+        assert result.patient.mbo == mbo
+    else:
+        assert result.mbo_stripped is False
+        assert result.patient.mbo is None
+        assert "mbo" in result.for_review
 
 
 def test_llm_hallucinated_mbo_is_discarded() -> None:
@@ -277,44 +302,43 @@ def test_croatian_prompt_examples_do_not_guess() -> None:
         assert patient.missed_visits_last_year is None
 
 
-def test_all_35_extraction_examples_from_domain_yaml() -> None:
-    path = get_settings().data_dir / EXTRACTION_EXAMPLES_PATH
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    examples = data["examples"]
-    assert len(examples) == 35
+@pytest.mark.parametrize("example", EXAMPLES, ids=EXAMPLE_IDS)
+def test_examples_correct_llm_answer_round_trips(example: dict[str, Any]) -> None:
+    """Checks validation and for_review handling, not extraction accuracy (that is E2-T4).
 
-    geo = MockGeocodingClient()
-    for item in examples:
-        spy = SpyLLMClient()
-        res = extract_intake(item["text"], llm_client=spy, geocoding_client=geo)
-        _, sent_user = spy.calls[0]
+    The "ideal LLM answer" is built from the yaml `expected` and `review` blocks, so this
+    catches yaml/schema drift (enum keys, field names, types) and for_review rules only.
+    """
+    expected = example["expected"]
+    patient_fields = set(ExtractedPatientDraft.model_fields)
+    visit_fields = set(ExtractedVisitRequestDraft.model_fields)
+    assert set(expected) <= (patient_fields | visit_fields) - {"mbo"}
 
-        if "mbo_in_text" in item:
-            expected_mbo = str(item["mbo_in_text"])
-            spaced_mbo = f"{expected_mbo[:3]} {expected_mbo[3:6]} {expected_mbo[6:]}"
-            assert res.mbo_stripped is True, item["id"]
-            assert res.patient.mbo == expected_mbo, item["id"]
-            assert "[MBO_REDACTED]" in sent_user, item["id"]
-            assert expected_mbo not in sent_user, item["id"]
-            assert spaced_mbo not in sent_user, item["id"]
-            assert "nula nula" not in sent_user.lower(), item["id"]
-        else:
-            assert res.mbo_stripped is False, item["id"]
-            assert res.patient.mbo is None, item["id"]
-            assert "mbo" in res.for_review, item["id"]
+    def _json_value(value: Any) -> Any:
+        return value.isoformat() if isinstance(value, date) else value
 
-        combined = {
-            **res.patient.model_dump(mode="json"),
-            **res.visit_request.model_dump(mode="json"),
-        }
-        for key, expected_val in item["expected"].items():
-            norm_expected = (
-                expected_val.isoformat() if isinstance(expected_val, date) else expected_val
-            )
-            assert combined[key] == norm_expected, f"{item['id']} field {key}"
+    answer = {
+        "patient": {k: _json_value(v) for k, v in expected.items() if k in patient_fields},
+        "visit_request": {k: _json_value(v) for k, v in expected.items() if k in visit_fields},
+        "review": list(example.get("review", [])),
+    }
+    res = extract_intake(
+        text="Sintetički tekst bez MBO-a.",
+        llm_client=MockLLMClient(response=json.dumps(answer)),
+        geocoding_client=MockGeocodingClient(),
+    )
 
-        for rev_field in item.get("review", []):
-            assert rev_field in res.for_review, f"{item['id']} missing review {rev_field}"
+    combined = {
+        **res.patient.model_dump(mode="json"),
+        **res.visit_request.model_dump(mode="json"),
+    }
+    for key, value in expected.items():
+        assert combined[key] == _json_value(value), key
+    for field in example.get("review", []):
+        assert field in res.for_review, field
+    for _section, field in REQUIRED_REVIEW_FIELDS:
+        if field not in expected:
+            assert field in res.for_review, field
 
 
 def test_extract_intake_endpoint_offline_demo_and_missing_fields(client: TestClient) -> None:
