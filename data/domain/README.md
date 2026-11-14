@@ -1,4 +1,4 @@
-# Domenski sadržaj (E13-T1 do T4)
+# Domenski sadržaj (E13-T1 do T5)
 
 Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je izmišljeno: imena, MBO i telefoni su očito lažni, nema ulica, a vrijednosti su procjene, ne klinički ni pravni podaci. Spornim vrijednostima u datotekama dodana je oznaka `# REVIEW:`.
 
@@ -12,6 +12,7 @@ Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je 
 | `scoring_factors.yaml` | faktori bodovanja, težine, pojasevi i razine usluge | E3-T1 (bodovi potrebe za podrškom) |
 | `synthetic_trips.yaml` | parametri raspodjela za generator povijesnih vožnji (`TripLog`); `python -m app.seed` ga uvijek pokreće | E1-T4 (generator sintetičkih vožnji) |
 | `hzzo_rules.yaml` | pravila HZZO-a: sanitetski prijevoz, putni nalog (prag 50 km, iznimke), tko izdaje nalog, izvori | E3-T2 (provjera prava na prijevoz) |
+| `extraction_examples.yaml` | 34 rečenice pacijenata (iz poziva) s očekivanim izdvojenim poljima, uključujući primjere s MBO-om i s podacima koji nedostaju | E2-T4 (točnost izdvajanja po polju, usporedba veličina Qwena) |
 
 ## Načela
 
@@ -34,3 +35,4 @@ Sintetički nacrt koji treba pregledati član tima s poznavanjem domene. Sve je 
 - Težine faktora bodovanja i njihov zbroj (1,0), pojasevi (udaljenost, dob, propušteni pregledi), vrijednosti za vrstu telefona i klasu pokretljivosti.
 - Preklapanje faktora "Dostupnost pratnje" i "Živi sam" (dvostruko brojanje).
 - Pragovi razina usluge (0,35 i 0,60) i pomoć koju dodaje svaka razina.
+- Očekivane vrijednosti u `extraction_examples.yaml` označene s `review` (dob iz "76. godina", štake, auto koji se ne smije voziti, propušteni pregledi bez vremenskog okvira) i vrijednosti `preferred_time_of_day` (`morning`, `afternoon`).
