@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -120,3 +120,13 @@ def test_lika_line_stops_have_coordinates() -> None:
         assert line["stops"][-1] == "Gospić"
         for stop in line["stops"]:
             assert stop in SETTLEMENT_COORDINATES, (line["key"], stop)
+
+
+def test_seed_includes_synthetic_trip_history(bundle: SeedBundle) -> None:
+    assert bundle.trip_logs
+    assert all(t.recorded_by == "synthetic" for t in bundle.trip_logs)
+    cutoff = datetime.combine(bundle.base_date, time.min, tzinfo=ZoneInfo("Europe/Zagreb"))
+    assert all(
+        t.actual_dropoff_at_home is not None and t.actual_dropoff_at_home < cutoff
+        for t in bundle.trip_logs
+    )
